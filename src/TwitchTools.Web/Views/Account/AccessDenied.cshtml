@@ -1,0 +1,14 @@
+@{
+    ViewData["Title"] = "Access denied";
+    var returnUrl = ViewData["ReturnUrl"] as string;
+}
+
+<h1>Access denied</h1>
+<p>Your account is authenticated but does not have permission for this page.</p>
+
+@if (!string.IsNullOrWhiteSpace(returnUrl))
+{
+    <p>Requested URL: @returnUrl</p>
+}
+
+<p><a asp-controller="MyTools" asp-action="Index">Go to My Tools</a></p>

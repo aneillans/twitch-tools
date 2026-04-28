@@ -1,0 +1,242 @@
+@model TwitchTools.Web.Models.MyToolsViewModel
+@{
+    ViewData["Title"] = "My Tools";
+}
+
+<h1>My Tools</h1>
+<p>Configure your own stream connections and automation settings.</p>
+
+@if (ViewData["StatusMessage"] is string statusMessage && !string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert alert-info">@statusMessage</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.OverlayUrl))
+{
+    <div class="card mb-4">
+        <div class="card-header">Overlay URL</div>
+        <div class="card-body">
+            <p class="text-muted mb-2">Use this URL in OBS as a Browser Source.</p>
+            <div class="input-group mb-2">
+                <input id="overlayUrlInput" type="text" class="form-control font-monospace" value="@Model.OverlayUrl" readonly />
+                <button class="btn btn-outline-secondary" type="button" onclick="copyOverlayUrl()">Copy</button>
+            </div>
+            <div class="small text-muted">Token: <span class="font-monospace">@Model.OverlayToken</span></div>
+        </div>
+    </div>
+}
+
+<div class="card mb-4">
+    <div class="card-header">Twitch Profile and Connections</div>
+    <div class="card-body">
+        <div class="alert alert-secondary">
+            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+                <span>Recommended: connect Twitch once and let the app fill your Twitch user id and tokens automatically.</span>
+                <div class="d-flex gap-2">
+                    <a class="btn btn-sm btn-primary" asp-controller="MyTools" asp-action="ConnectTwitch">Connect Streamer Twitch</a>
+                    <a class="btn btn-sm btn-outline-primary" asp-controller="MyTools" asp-action="ConnectTwitchBot">Connect Twitch Bot</a>
+                </div>
+            </div>
+        </div>
+
+        <form asp-controller="MyTools" asp-action="SaveTwitch" method="post">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Display Name</label>
+                    <input class="form-control" asp-for="Twitch.DisplayName" required />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Streamer Twitch User Id</label>
+                    <input class="form-control" asp-for="Twitch.TwitchUserId" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Streamer Access Token</label>
+                    <input class="form-control" asp-for="Twitch.TwitchStreamerAccessToken" type="password" autocomplete="new-password" spellcheck="false" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Streamer Refresh Token</label>
+                    <input class="form-control" asp-for="Twitch.TwitchStreamerRefreshToken" type="password" autocomplete="new-password" spellcheck="false" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Twitch Client Id (optional override)</label>
+                    <input class="form-control" asp-for="Twitch.TwitchClientId" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Bot Access Token</label>
+                    <input class="form-control" asp-for="Twitch.TwitchBotAccessToken" type="password" autocomplete="new-password" spellcheck="false" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Bot Refresh Token</label>
+                    <input class="form-control" asp-for="Twitch.TwitchBotRefreshToken" type="password" autocomplete="new-password" spellcheck="false" />
+                </div>
+            </div>
+            <p class="text-muted small mt-3 mb-0">
+                Bot identity is derived from the authenticated Twitch bot account. If no bot account is connected, the app automatically falls back to the streamer account.
+            </p>
+            <div class="mt-3">
+                <button class="btn btn-primary" type="submit">Save Twitch settings</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function copyOverlayUrl() {
+        const input = document.getElementById('overlayUrlInput');
+        if (!input) {
+            return;
+        }
+
+        input.select();
+        input.setSelectionRange(0, 99999);
+        navigator.clipboard.writeText(input.value);
+    }
+</script>
+
+<div class="card mb-4">
+    <div class="card-header">BlueSky Connection</div>
+    <div class="card-body">
+        <div class="alert alert-secondary">
+            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+                <span>Create an App Password in BlueSky and enter it below.</span>
+            </div>
+        </div>
+        <form asp-controller="MyTools" asp-action="SaveBlueSky" method="post">  
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">BlueSky Identifier</label>
+                    <input class="form-control" asp-for="BlueSky.BlueSkyIdentifier" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">BlueSky App Password</label>
+                    <input class="form-control" asp-for="BlueSky.BlueSkyAppPassword" type="password" autocomplete="new-password" spellcheck="false" />
+                </div>
+            </div>
+            <div class="mt-3">
+                <button class="btn btn-primary" type="submit">Save BlueSky settings</button>
+            </div>     
+        </form>       
+
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">Timed Chat Messages</div>
+            <div class="card-body">
+                <form asp-controller="MyTools" asp-action="AddTimedMessage" method="post" class="row g-2 mb-3">
+                    <div class="col-12">
+                        <input class="form-control" name="MessageText" placeholder="Message text" required />
+                    </div>
+                    <div class="col-8">
+                        <input class="form-control" type="number" min="1" name="IntervalMinutes" value="30" required />
+                    </div>
+                    <div class="col-4 d-grid">
+                        <button class="btn btn-outline-primary" type="submit">Add</button>
+                    </div>
+                </form>
+
+                @if (!Model.TimedMessages.Any())
+                {
+                    <p class="text-muted">No timed messages yet.</p>
+                }
+                else
+                {
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Message</th>
+                                <th>Interval</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var msg in Model.TimedMessages)
+                        {
+                            <tr>
+                                <td>@msg.MessageText</td>
+                                <td>@msg.IntervalMinutes min</td>
+                                <td>@(msg.Enabled ? "Enabled" : "Disabled")</td>
+                                <td class="text-end">
+                                    <form asp-controller="MyTools" asp-action="ToggleTimedMessage" asp-route-id="@msg.Id" method="post" class="d-inline">
+                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Toggle</button>
+                                    </form>
+                                    <form asp-controller="MyTools" asp-action="DeleteTimedMessage" asp-route-id="@msg.Id" method="post" class="d-inline">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">Discord Schedule Sync Servers</div>
+            <div class="card-body">
+                @if (ViewData["DiscordInviteUrl"] is string discordInviteUrl && !string.IsNullOrWhiteSpace(discordInviteUrl))
+                {
+                    <div class="alert alert-secondary">
+                        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+                            <span>First, invite the bot to your Discord server. The bot needs <strong>Manage Events</strong> permission.</span>
+                            <a class="btn btn-sm btn-primary" href="@discordInviteUrl" target="_blank" rel="noopener noreferrer">Invite Discord Bot</a>
+                        </div>
+                    </div>
+                }
+
+                <p class="text-muted small">
+                    Right-click your server in Discord and select <em>Copy Server ID</em> (requires Developer Mode enabled in Discord settings).
+                </p>
+
+                <form asp-controller="MyTools" asp-action="AddDiscordSync" method="post" class="row g-2 mb-3">
+                    @Html.AntiForgeryToken()
+                    <div class="col-9">
+                        <input class="form-control" name="GuildId" placeholder="Discord Server (Guild) ID" required />
+                    </div>
+                    <div class="col-3 d-grid">
+                        <button class="btn btn-outline-primary" type="submit">Add</button>
+                    </div>
+                </form>
+
+                @if (!Model.DiscordSyncs.Any())
+                {
+                    <p class="text-muted">No Discord servers added yet.</p>
+                }
+                else
+                {
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Server (Guild) ID</th>
+                                <th>Last Synced</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var sync in Model.DiscordSyncs)
+                        {
+                            <tr>
+                                <td class="font-monospace">@sync.GuildId</td>
+                                <td class="text-muted small">
+                                    @(sync.LastSyncedUtc == DateTime.UnixEpoch ? "Never" : sync.LastSyncedUtc.ToString("yyyy-MM-dd HH:mm") + " UTC")
+                                </td>
+                                <td class="text-end">
+                                    <form asp-controller="MyTools" asp-action="DeleteDiscordSync" asp-route-id="@sync.Id" method="post" class="d-inline">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,33 @@
+name: CI Build
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore TwitchTools.slnx
+
+      - name: Build
+        run: dotnet build TwitchTools.slnx --configuration Release --no-restore
+
+      - name: Build Docker image (no push)
+        run: docker build -f Dockerfile -t twitch-tools:ci .

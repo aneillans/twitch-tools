@@ -1,0 +1,112 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using TwitchTools.Web.Domain;
+using TwitchTools.Web.Services.Security;
+
+namespace TwitchTools.Web.Data;
+
+public sealed class AppDbContext(
+    DbContextOptions<AppDbContext> options,
+    IDataEncryptionService encryptionService) : DbContext(options)
+{
+    public DbSet<Streamer> Streamers => Set<Streamer>();
+    public DbSet<LiveNotificationEvent> LiveNotificationEvents => Set<LiveNotificationEvent>();
+    public DbSet<DiscordGuildSync> DiscordGuildSyncs => Set<DiscordGuildSync>();
+    public DbSet<TimedChatMessage> TimedChatMessages => Set<TimedChatMessage>();
+    public DbSet<ViewerDurationSample> ViewerDurationSamples => Set<ViewerDurationSample>();
+    public DbSet<OverlaySnapshot> OverlaySnapshots => Set<OverlaySnapshot>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        var encryptedString = new ValueConverter<string, string>(
+            value => encryptionService.Encrypt(value),
+            value => encryptionService.Decrypt(value));
+
+        var encryptedNullableString = new ValueConverter<string?, string?>(
+            value => value == null ? null : encryptionService.Encrypt(value),
+            value => value == null ? null : encryptionService.Decrypt(value));
+
+        modelBuilder.Entity<Streamer>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.OwnerSubject).IsUnique();
+            entity.HasIndex(x => x.TwitchUserId).IsUnique();
+            entity.HasIndex(x => x.OverlayToken).IsUnique();
+            entity.Property(x => x.OwnerSubject).HasMaxLength(128);
+            entity.Property(x => x.OwnerEmail).HasMaxLength(256);
+            entity.Property(x => x.DisplayName).HasMaxLength(128);
+            entity.Property(x => x.TwitchUserId).HasMaxLength(64);
+            entity.Property(x => x.TwitchStreamerAccessToken).HasMaxLength(2048).HasConversion(encryptedString);
+            entity.Property(x => x.TwitchStreamerRefreshToken).HasMaxLength(2048).HasConversion(encryptedNullableString);
+            entity.Property(x => x.TwitchClientId).HasMaxLength(128);
+            entity.Property(x => x.TwitchBotUserId).HasMaxLength(64);
+            entity.Property(x => x.TwitchBotAccessToken).HasMaxLength(2048).HasConversion(encryptedNullableString);
+            entity.Property(x => x.TwitchBotRefreshToken).HasMaxLength(2048).HasConversion(encryptedNullableString);
+            entity.Property(x => x.TwitchModeratorUserId).HasMaxLength(64);
+            entity.Property(x => x.BlueSkyIdentifier).HasMaxLength(256);
+            entity.Property(x => x.BlueSkyAppPassword).HasMaxLength(512).HasConversion(encryptedNullableString);
+            entity.Property(x => x.OverlayToken).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<LiveNotificationEvent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.StreamerId, x.RecordedUtc });
+            entity.Property(x => x.BlueSkyPostUri).HasMaxLength(512);
+        });
+
+        modelBuilder.Entity<DiscordGuildSync>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.StreamerId, x.GuildId }).IsUnique();
+            entity.Property(x => x.GuildId).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<TimedChatMessage>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.StreamerId, x.Enabled });
+            entity.Property(x => x.MessageText).HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<ViewerDurationSample>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.StreamerId, x.TwitchViewerId, x.CapturedUtc });
+            entity.Property(x => x.TwitchViewerId).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<OverlaySnapshot>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.StreamerId).IsUnique();
+            entity.Property(x => x.LastFollowerName).HasMaxLength(128);
+            entity.Property(x => x.LastSubscriberName).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<LiveNotificationEvent>()
+            .HasOne(x => x.Streamer)
+            .WithMany(x => x.LiveNotificationEvents)
+            .HasForeignKey(x => x.StreamerId);
+
+        modelBuilder.Entity<DiscordGuildSync>()
+            .HasOne(x => x.Streamer)
+            .WithMany()
+            .HasForeignKey(x => x.StreamerId);
+
+        modelBuilder.Entity<TimedChatMessage>()
+            .HasOne(x => x.Streamer)
+            .WithMany(x => x.TimedChatMessages)
+            .HasForeignKey(x => x.StreamerId);
+
+        modelBuilder.Entity<ViewerDurationSample>()
+            .HasOne(x => x.Streamer)
+            .WithMany(x => x.ViewerDurationSamples)
+            .HasForeignKey(x => x.StreamerId);
+
+        modelBuilder.Entity<OverlaySnapshot>()
+            .HasOne(x => x.Streamer)
+            .WithOne(x => x.OverlaySnapshot)
+            .HasForeignKey<OverlaySnapshot>(x => x.StreamerId);
+    }
+}

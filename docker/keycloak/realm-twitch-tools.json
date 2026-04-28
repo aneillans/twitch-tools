@@ -1,0 +1,69 @@
+{
+  "realm": "twitch-tools",
+  "enabled": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Application administrator role"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "twitch-tools-web",
+      "name": "Twitch Tools Web",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "twitch-tools-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/signin-oidc"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:8080/*"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "streamer-admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Streamer",
+      "lastName": "Admin",
+      "email": "streamer-admin@example.com",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "streamer-admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin"
+      ]
+    },
+    {
+      "username": "streamer-user",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Streamer",
+      "lastName": "User",
+      "email": "streamer-user@example.com",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "streamer-user",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+﻿@{
+    ViewData["Title"] = "Twitch Tools";
+}
+
+<div class="text-center">
+    <h1 class="display-5">Twitch Tools Control Center</h1>
+    <p class="lead">Automation for BlueSky live posts, Discord schedule sync, timed chat messages, viewer watch tracking, and OBS-friendly overlay endpoints.</p>
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <a class="btn btn-primary" asp-controller="Dashboard" asp-action="Index">Open Dashboard</a>
+    }
+    else
+    {
+        <a class="btn btn-primary" href="/account/login">Sign in with Keycloak</a>
+    }
+</div>

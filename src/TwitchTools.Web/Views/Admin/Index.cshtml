@@ -1,0 +1,29 @@
+@model IEnumerable<dynamic>
+@{
+    ViewData["Title"] = "Admin";
+}
+
+<h1>Admin</h1>
+<p>Recent live-state event history.</p>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Streamer</th>
+            <th>Live</th>
+            <th>Recorded (UTC)</th>
+            <th>BlueSky Post</th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var item in Model)
+    {
+        <tr>
+            <td>@item.StreamerId</td>
+            <td>@item.IsLive</td>
+            <td>@item.RecordedUtc</td>
+            <td>@(item.BlueSkyPostUri ?? "-")</td>
+        </tr>
+    }
+    </tbody>
+</table>

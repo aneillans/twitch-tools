@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: twitchtools-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: twitchtools
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d twitchtools"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    container_name: twitchtools-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres
+      KC_DB_URL_PORT: 5432
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: postgres
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME: http://localhost:8081
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./docker/keycloak/realm-twitch-tools.json:/opt/keycloak/data/import/realm-twitch-tools.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: twitchtools-web
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=twitchtools;Username=postgres;Password=postgres
+      Keycloak__Authority: http://localhost:8081/realms/twitch-tools
+      Keycloak__MetadataAddress: http://keycloak:8080/realms/twitch-tools/.well-known/openid-configuration
+      Keycloak__ClientId: twitch-tools-web
+      Keycloak__ClientSecret: twitch-tools-secret
+      Keycloak__RequireHttpsMetadata: "false"
+      Twitch__DefaultClientId: ${TWITCH_CLIENT_ID:-}
+      Twitch__OAuthClientSecret: ${TWITCH_CLIENT_SECRET:-}
+      Twitch__OAuthRedirectUri: http://localhost:8080/my-tools/connect/twitch/callback
+      Discord__BotClientId: ${DISCORD_BOT_CLIENT_ID:-}
+      Encryption__Salt: ${ENCRYPTION_SALT:-replace-with-long-random-value}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
