@@ -121,6 +121,10 @@
             </div>     
         </form>       
 
+        <form asp-controller="MyTools" asp-action="TestBlueSky" method="post" class="mt-3">
+            @Html.AntiForgeryToken()
+            <button class="btn btn-outline-secondary" type="submit">Test connection</button>
+        </form>
     </div>
 </div>
 

@@ -10,6 +10,7 @@ using TwitchTools.Web.Domain;
 using TwitchTools.Web.Models;
 using TwitchTools.Web.Options;
 using TwitchTools.Web.Services;
+using TwitchTools.Web.Services.Clients;
 
 namespace TwitchTools.Web.Controllers;
 
@@ -20,6 +21,7 @@ public sealed class MyToolsController(
     IOptions<DiscordOptions> discordOptions,
     IHttpClientFactory httpClientFactory,
     IDiscordScheduleSyncService discordSyncService,
+    IBlueSkyApiClient blueSkyApiClient,
     ILogger<MyToolsController> logger) : Controller
 {
     private const string TwitchOAuthStateCookie = "twitch_oauth_state";
@@ -288,6 +290,31 @@ public sealed class MyToolsController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         TempData["StatusMessage"] = "Twitch settings saved.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost("/my-tools/bluesky/test")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TestBlueSky(CancellationToken cancellationToken)
+    {
+        var ownerSubject = GetOwnerSubject();
+        if (ownerSubject is null)
+        {
+            return Challenge();
+        }
+
+        var streamer = await GetOwnedStreamerAsync(cancellationToken);
+        if (streamer is null || string.IsNullOrWhiteSpace(streamer.BlueSkyIdentifier) || string.IsNullOrWhiteSpace(streamer.BlueSkyAppPassword))
+        {
+            TempData["StatusMessage"] = "Save your BlueSky identifier and app password before testing the connection.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var credentials = new BlueSkyCredentials(streamer.BlueSkyIdentifier, streamer.BlueSkyAppPassword);
+        var ok = await blueSkyApiClient.TestConnectionAsync(credentials, cancellationToken);
+        TempData["StatusMessage"] = ok
+            ? "BlueSky connection successful."
+            : "BlueSky connection failed. Check your identifier and app password.";
         return RedirectToAction(nameof(Index));
     }
 
