@@ -26,13 +26,13 @@ namespace TwitchTools.Web.Data.Migrations
 
             migrationBuilder.Sql(
                 """
-                UPDATE \"Streamers\"
-                SET \"FollowerOverlayToken\" = CASE
-                    WHEN COALESCE(\"OverlayToken\", '') = '' THEN md5(random()::text || clock_timestamp()::text)
-                    ELSE \"OverlayToken\"
+                UPDATE "Streamers"
+                SET "FollowerOverlayToken" = CASE
+                    WHEN COALESCE("OverlayToken", '') = '' THEN md5(random()::text || clock_timestamp()::text)
+                    ELSE "OverlayToken"
                 END,
-                    \"SubscriberOverlayToken\" = md5(random()::text || clock_timestamp()::text)
-                WHERE \"FollowerOverlayToken\" IS NULL OR \"SubscriberOverlayToken\" IS NULL;
+                    "SubscriberOverlayToken" = md5(random()::text || clock_timestamp()::text)
+                WHERE "FollowerOverlayToken" IS NULL OR "SubscriberOverlayToken" IS NULL;
                 """);
 
             migrationBuilder.AlterColumn<string>(
