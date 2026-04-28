@@ -1,0 +1,49 @@
+# Build artifacts
+bin/
+obj/
+out/
+artifacts/
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE folders
+.vs/
+.vscode/
+.idea/
+
+# Test and coverage
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+coverage/
+
+# Logs
+*.log
+logs/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+
+# Tooling caches
+_ReSharper*/
+*.DotSettings.user
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local containers/data
+postgres-data/

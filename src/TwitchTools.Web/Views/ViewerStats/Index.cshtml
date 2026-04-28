@@ -1,0 +1,80 @@
+@model TwitchTools.Web.Models.ViewerStatsViewModel
+@{
+    ViewData["Title"] = "Viewer Stats";
+    var currentPage = (int)(ViewData["CurrentPage"] ?? 1);
+    var totalPages = (int)(ViewData["TotalPages"] ?? 1);
+    var noProfile = ViewData["NoProfile"] as bool? == true;
+}
+
+<h1>Viewer Stats</h1>
+<p class="text-muted">Aggregated watch time per viewer based on chat presence while you were live.</p>
+
+@if (noProfile)
+{
+    <div class="alert alert-info">
+        You have not configured your profile yet. <a asp-controller="MyTools" asp-action="Index">Open My Tools</a> to add your Twitch connection so viewer data can be collected.
+    </div>
+}
+else if (!Model.Rows.Any())
+{
+    <div class="alert alert-secondary">
+        No viewer data has been collected yet. Viewer watch time is recorded while you are live. Check back after your next stream.
+    </div>
+}
+else
+{
+    <div class="mb-3 text-muted small">@Model.TotalViewers unique viewer@(Model.TotalViewers == 1 ? "" : "s") tracked</div>
+
+    <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Viewer ID</th>
+                    <th scope="col">Total Time Watched</th>
+                    <th scope="col" class="text-end">Seconds</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{var rank = (currentPage - 1) * 100;}
+                @foreach (var row in Model.Rows)
+                {
+                    rank++;
+                    <tr>
+                        <td class="text-muted">@rank</td>
+                        <td class="font-monospace">@row.TwitchViewerId</td>
+                        <td>
+                            @if (row.TotalTime.TotalHours >= 1)
+                            {
+                                @($"{(int)row.TotalTime.TotalHours}h {row.TotalTime.Minutes}m {row.TotalTime.Seconds}s")
+                            }
+                            else if (row.TotalTime.TotalMinutes >= 1)
+                            {
+                                @($"{row.TotalTime.Minutes}m {row.TotalTime.Seconds}s")
+                            }
+                            else
+                            {
+                                @($"{row.TotalTime.Seconds}s")
+                            }
+                        </td>
+                        <td class="text-end text-muted small">@row.TotalSecondsWatched</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <nav>
+            <ul class="pagination pagination-sm">
+                @for (var p = 1; p <= totalPages; p++)
+                {
+                    <li class="page-item @(p == currentPage ? "active" : "")">
+                        <a class="page-link" asp-controller="ViewerStats" asp-action="Index" asp-route-page="@p">@p</a>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}

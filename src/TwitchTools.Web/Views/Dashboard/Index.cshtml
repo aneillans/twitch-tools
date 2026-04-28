@@ -1,0 +1,41 @@
+@model dynamic
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<h1>Dashboard</h1>
+<p>Authenticated tools overview for connected streamer accounts.</p>
+
+@if (Model.HasProfile != true)
+{
+    <div class="alert alert-info">
+        You have not configured your profile yet. <a asp-controller="MyTools" asp-action="Index">Open My Tools</a> to add your connections and automation settings.
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Streamers</h5>
+                <p class="display-6">@Model.StreamerCount</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Timed Messages</h5>
+                <p class="display-6">@Model.TimedMessageCount</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Discord Sync Links</h5>
+                <p class="display-6">@Model.DiscordSyncCount</p>
+            </div>
+        </div>
+    </div>
+</div>
