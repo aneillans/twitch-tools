@@ -25,6 +25,7 @@ public sealed class TwitchConnectionInput
 {
     public string DisplayName { get; set; } = string.Empty;
     public string TwitchUserId { get; set; } = string.Empty;
+    public string? TwitchBotUserId { get; set; }
     public string TwitchStreamerAccessToken { get; set; } = string.Empty;
     public string? TwitchStreamerRefreshToken { get; set; }
     public string? TwitchClientId { get; set; }

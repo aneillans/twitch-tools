@@ -116,6 +116,67 @@ public sealed class TwitchApiClient(
             .ToArray();
     }
 
+    public async Task<TwitchFollowerEvent?> GetLatestFollowerAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(authContext.ModeratorUserId))
+        {
+            return null;
+        }
+
+        using var request = CreateRequest(
+            HttpMethod.Get,
+            $"helix/channels/followers?broadcaster_id={Uri.EscapeDataString(broadcasterUserId)}&moderator_id={Uri.EscapeDataString(authContext.ModeratorUserId)}&first=1",
+            authContext);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogWarning("Twitch follower fetch failed for {Broadcaster}: {StatusCode}", broadcasterUserId, response.StatusCode);
+            return null;
+        }
+
+        await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var payload = await JsonSerializer.DeserializeAsync<HelixDataEnvelope<TwitchFollowerItem>>(
+            contentStream,
+            TwitchJsonOptions,
+            cancellationToken: cancellationToken);
+        var item = payload?.Data.FirstOrDefault();
+        if (item is null || string.IsNullOrWhiteSpace(item.UserId))
+        {
+            return null;
+        }
+
+        return new TwitchFollowerEvent(item.UserId, item.UserLogin, item.UserName, item.FollowedAt);
+    }
+
+    public async Task<TwitchSubscriberEvent?> GetLatestSubscriberAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(
+            HttpMethod.Get,
+            $"helix/subscriptions?broadcaster_id={Uri.EscapeDataString(broadcasterUserId)}&first=1",
+            authContext);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogWarning("Twitch subscriber fetch failed for {Broadcaster}: {StatusCode}", broadcasterUserId, response.StatusCode);
+            return null;
+        }
+
+        await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var payload = await JsonSerializer.DeserializeAsync<HelixDataEnvelope<TwitchSubscriberItem>>(
+            contentStream,
+            TwitchJsonOptions,
+            cancellationToken: cancellationToken);
+        var item = payload?.Data.FirstOrDefault();
+        if (item is null || string.IsNullOrWhiteSpace(item.UserId))
+        {
+            return null;
+        }
+
+        return new TwitchSubscriberEvent(item.UserId, item.UserLogin, item.UserName);
+    }
+
     private static HttpRequestMessage CreateRequest(HttpMethod method, string relativePath, TwitchAuthContext authContext)
     {
         var request = new HttpRequestMessage(method, relativePath);
@@ -173,5 +234,32 @@ public sealed class TwitchApiClient(
     {
         [JsonPropertyName("name")]
         public string? Name { get; init; }
+    }
+
+    private sealed class TwitchFollowerItem
+    {
+        [JsonPropertyName("user_id")]
+        public string UserId { get; init; } = string.Empty;
+
+        [JsonPropertyName("user_login")]
+        public string? UserLogin { get; init; }
+
+        [JsonPropertyName("user_name")]
+        public string? UserName { get; init; }
+
+        [JsonPropertyName("followed_at")]
+        public DateTimeOffset? FollowedAt { get; init; }
+    }
+
+    private sealed class TwitchSubscriberItem
+    {
+        [JsonPropertyName("user_id")]
+        public string UserId { get; init; } = string.Empty;
+
+        [JsonPropertyName("user_login")]
+        public string? UserLogin { get; init; }
+
+        [JsonPropertyName("user_name")]
+        public string? UserName { get; init; }
     }
 }

@@ -7,7 +7,6 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@Model.Title</title>
     <style>
         :root {
             font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -19,33 +18,16 @@
             background: transparent;
         }
 
-        .event {
-            max-width: 500px;
-            margin: 0;
-            padding: 1rem;
-            background: rgba(0, 0, 0, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 0.5rem;
-            display: grid;
-            gap: 0.25rem;
-        }
-
-        .label {
-            font-size: 0.8rem;
-            opacity: 0.8;
-            text-transform: uppercase;
-        }
-
         .value {
+            margin: 0;
+            padding: 0;
             font-size: 1.2rem;
             font-weight: 600;
+            line-height: 1.2;
         }
     </style>
 </head>
 <body>
-<div class="event">
-    <div class="label">@Model.Title</div>
-    <div class="value">@(Model.DisplayValue ?? Model.EmptyMessage)</div>
-</div>
+<div class="value">@(Model.DisplayValue ?? string.Empty)</div>
 </body>
 </html>

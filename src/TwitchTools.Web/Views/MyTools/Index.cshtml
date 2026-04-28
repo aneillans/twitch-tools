@@ -32,6 +32,30 @@
             </div>
         </div>
 
+        <div class="card mb-3 bg-light-subtle">
+            <div class="card-header">Connected Twitch Identities</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Streamer Account</label>
+                        <input class="form-control" value="@(string.IsNullOrWhiteSpace(Model.Twitch.TwitchUserId) ? "Not connected" : "Connected")" readonly />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Streamer Twitch User Id</label>
+                        <input class="form-control font-monospace" value="@(string.IsNullOrWhiteSpace(Model.Twitch.TwitchUserId) ? "-" : Model.Twitch.TwitchUserId)" readonly />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Bot Account</label>
+                        <input class="form-control" value="@(string.IsNullOrWhiteSpace(Model.Twitch.TwitchBotUserId) ? "Not connected" : "Connected")" readonly />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Bot Twitch User Id</label>
+                        <input class="form-control font-monospace" value="@(string.IsNullOrWhiteSpace(Model.Twitch.TwitchBotUserId) ? "-" : Model.Twitch.TwitchBotUserId)" readonly />
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <form asp-controller="MyTools" asp-action="SaveTwitch" method="post">
             <div class="row g-3">
                 <div class="col-md-6">

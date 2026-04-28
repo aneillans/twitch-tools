@@ -67,6 +67,7 @@ public sealed class MyToolsController(
             {
                 DisplayName = streamer.DisplayName,
                 TwitchUserId = streamer.TwitchUserId,
+                TwitchBotUserId = streamer.TwitchBotUserId,
                 TwitchStreamerAccessToken = streamer.TwitchStreamerAccessToken,
                 TwitchStreamerRefreshToken = streamer.TwitchStreamerRefreshToken,
                 TwitchClientId = streamer.TwitchClientId,
