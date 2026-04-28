@@ -32,6 +32,8 @@ public sealed class AppDbContext(
             entity.HasIndex(x => x.OwnerSubject).IsUnique();
             entity.HasIndex(x => x.TwitchUserId).IsUnique();
             entity.HasIndex(x => x.OverlayToken).IsUnique();
+            entity.HasIndex(x => x.FollowerOverlayToken).IsUnique();
+            entity.HasIndex(x => x.SubscriberOverlayToken).IsUnique();
             entity.Property(x => x.OwnerSubject).HasMaxLength(128);
             entity.Property(x => x.OwnerEmail).HasMaxLength(256);
             entity.Property(x => x.DisplayName).HasMaxLength(128);
@@ -46,6 +48,8 @@ public sealed class AppDbContext(
             entity.Property(x => x.BlueSkyIdentifier).HasMaxLength(256);
             entity.Property(x => x.BlueSkyAppPassword).HasMaxLength(512).HasConversion(encryptedNullableString);
             entity.Property(x => x.OverlayToken).HasMaxLength(64);
+            entity.Property(x => x.FollowerOverlayToken).HasMaxLength(64);
+            entity.Property(x => x.SubscriberOverlayToken).HasMaxLength(64);
         });
 
         modelBuilder.Entity<LiveNotificationEvent>(entity =>

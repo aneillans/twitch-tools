@@ -8,15 +8,27 @@ namespace TwitchTools.Web.Controllers;
 [Route("overlay")]
 public sealed class OverlayController(IOverlayService overlayService) : Controller
 {
-    [HttpGet("{token}")]
-    public async Task<IActionResult> Index(string token, CancellationToken cancellationToken)
+    [HttpGet("followers/{token}")]
+    public async Task<IActionResult> Followers(string token, CancellationToken cancellationToken)
     {
-        var model = await overlayService.GetByTokenAsync(token, cancellationToken);
+        var model = await overlayService.GetFollowerByTokenAsync(token, cancellationToken);
         if (model is null)
         {
             return NotFound();
         }
 
-        return View(model);
+        return View("Widget", model);
+    }
+
+    [HttpGet("subscribers/{token}")]
+    public async Task<IActionResult> Subscribers(string token, CancellationToken cancellationToken)
+    {
+        var model = await overlayService.GetSubscriberByTokenAsync(token, cancellationToken);
+        if (model is null)
+        {
+            return NotFound();
+        }
+
+        return View("Widget", model);
     }
 }

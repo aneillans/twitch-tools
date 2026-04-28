@@ -1,4 +1,4 @@
-@model TwitchTools.Web.Models.OverlayViewModel
+@model TwitchTools.Web.Models.OverlayWidgetViewModel
 @{
     Layout = null;
 }
@@ -7,7 +7,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Twitch Overlay</title>
+    <title>@Model.Title</title>
     <style>
         :root {
             font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -19,19 +19,15 @@
             background: transparent;
         }
 
-        .overlay {
+        .event {
             max-width: 500px;
             margin: 0;
             padding: 1rem;
-            display: grid;
-            gap: 0.75rem;
-        }
-
-        .event {
             background: rgba(0, 0, 0, 0.6);
             border: 1px solid rgba(255, 255, 255, 0.25);
             border-radius: 0.5rem;
-            padding: 0.75rem;
+            display: grid;
+            gap: 0.25rem;
         }
 
         .label {
@@ -47,15 +43,9 @@
     </style>
 </head>
 <body>
-<div class="overlay">
-    <div class="event">
-        <div class="label">Last Follower</div>
-        <div class="value">@(Model.LastFollowerName ?? "No recent follower")</div>
-    </div>
-    <div class="event">
-        <div class="label">Last Subscriber</div>
-        <div class="value">@(Model.LastSubscriberName ?? "No recent subscriber")</div>
-    </div>
+<div class="event">
+    <div class="label">@Model.Title</div>
+    <div class="value">@(Model.DisplayValue ?? Model.EmptyMessage)</div>
 </div>
 </body>
 </html>

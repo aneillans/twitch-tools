@@ -17,6 +17,8 @@ public sealed class Streamer
     public string? BlueSkyAppPassword { get; set; }
     public string DisplayName { get; set; } = string.Empty;
     public string OverlayToken { get; set; } = string.Empty;
+    public string FollowerOverlayToken { get; set; } = string.Empty;
+    public string SubscriberOverlayToken { get; set; } = string.Empty;
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
     public ICollection<LiveNotificationEvent> LiveNotificationEvents { get; set; } = new List<LiveNotificationEvent>();

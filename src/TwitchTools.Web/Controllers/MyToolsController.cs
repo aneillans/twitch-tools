@@ -48,20 +48,6 @@ public sealed class MyToolsController(
             return View(new MyToolsViewModel());
         }
 
-        var timedMessages = await dbContext.TimedChatMessages
-            .AsNoTracking()
-            .Where(x => x.StreamerId == streamer.Id)
-            .OrderBy(x => x.Id)
-            .Select(x => new TimedMessageItem
-            {
-                Id = x.Id,
-                MessageText = x.MessageText,
-                IntervalMinutes = (int)Math.Max(1, x.Interval.TotalMinutes),
-                Enabled = x.Enabled,
-                LastSentUtc = x.LastSentUtc
-            })
-            .ToListAsync(cancellationToken);
-
         var discordSyncs = await dbContext.DiscordGuildSyncs
             .AsNoTracking()
             .Where(x => x.StreamerId == streamer.Id)
@@ -92,9 +78,6 @@ public sealed class MyToolsController(
                 BlueSkyIdentifier = streamer.BlueSkyIdentifier,
                 BlueSkyAppPassword = streamer.BlueSkyAppPassword
             },
-            OverlayToken = streamer.OverlayToken,
-            OverlayUrl = BuildOverlayUrl(streamer.OverlayToken),
-            TimedMessages = timedMessages,
             DiscordSyncs = discordSyncs
         };
 
@@ -324,69 +307,6 @@ public sealed class MyToolsController(
         return RedirectToAction(nameof(Index));
     }
 
-    [HttpPost("/my-tools/timed-messages")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddTimedMessage(AddTimedMessageInput input, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(input.MessageText) || input.IntervalMinutes < 1)
-        {
-            return RedirectToAction(nameof(Index));
-        }
-
-        var streamer = await GetOwnedStreamerAsync(cancellationToken);
-        if (streamer is null)
-        {
-            return RedirectToAction(nameof(Index));
-        }
-
-        dbContext.TimedChatMessages.Add(new TimedChatMessage
-        {
-            StreamerId = streamer.Id,
-            MessageText = input.MessageText.Trim(),
-            Interval = TimeSpan.FromMinutes(input.IntervalMinutes),
-            Enabled = true
-        });
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToAction(nameof(Index));
-    }
-
-    [HttpPost("/my-tools/timed-messages/{id:long}/toggle")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ToggleTimedMessage(long id, CancellationToken cancellationToken)
-    {
-        var message = await dbContext.TimedChatMessages
-            .Include(x => x.Streamer)
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-
-        if (message is null || !IsOwner(message.Streamer.OwnerSubject))
-        {
-            return RedirectToAction(nameof(Index));
-        }
-
-        message.Enabled = !message.Enabled;
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToAction(nameof(Index));
-    }
-
-    [HttpPost("/my-tools/timed-messages/{id:long}/delete")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteTimedMessage(long id, CancellationToken cancellationToken)
-    {
-        var message = await dbContext.TimedChatMessages
-            .Include(x => x.Streamer)
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-
-        if (message is null || !IsOwner(message.Streamer.OwnerSubject))
-        {
-            return RedirectToAction(nameof(Index));
-        }
-
-        dbContext.TimedChatMessages.Remove(message);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToAction(nameof(Index));
-    }
-
     [HttpPost("/my-tools/discord-syncs")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddDiscordSync(AddDiscordSyncInput input, CancellationToken cancellationToken)
@@ -453,6 +373,8 @@ public sealed class MyToolsController(
         if (streamer is not null)
         {
             streamer.OwnerEmail = ownerEmail;
+            streamer.FollowerOverlayToken = EnsureToken(streamer.FollowerOverlayToken, streamer.OverlayToken);
+            streamer.SubscriberOverlayToken = EnsureToken(streamer.SubscriberOverlayToken);
             return streamer;
         }
 
@@ -461,7 +383,9 @@ public sealed class MyToolsController(
             Id = Guid.NewGuid(),
             OwnerSubject = ownerSubject,
             OwnerEmail = ownerEmail,
-            OverlayToken = Guid.NewGuid().ToString("N")
+            OverlayToken = Guid.NewGuid().ToString("N"),
+            FollowerOverlayToken = Guid.NewGuid().ToString("N"),
+            SubscriberOverlayToken = Guid.NewGuid().ToString("N")
         };
 
         dbContext.Streamers.Add(streamer);
@@ -502,9 +426,19 @@ public sealed class MyToolsController(
             + "&scope=" + Uri.EscapeDataString(options.InviteScopes);
     }
 
-    private string BuildOverlayUrl(string overlayToken)
+    private static string EnsureToken(string? token, string? fallbackToken = null)
     {
-        return $"{Request.Scheme}://{Request.Host}{Request.PathBase}/overlay/{overlayToken}";
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            return token;
+        }
+
+        if (!string.IsNullOrWhiteSpace(fallbackToken))
+        {
+            return fallbackToken;
+        }
+
+        return Guid.NewGuid().ToString("N");
     }
 
     private sealed class TwitchTokenResponse

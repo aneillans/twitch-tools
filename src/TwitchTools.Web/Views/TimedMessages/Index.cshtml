@@ -1,0 +1,72 @@
+@model TwitchTools.Web.Models.TimedMessagesPageViewModel
+@{
+    ViewData["Title"] = "Timed Chat Messages";
+}
+
+<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">Timed Chat Messages</h1>
+        <p class="text-muted mb-0">Create and manage recurring messages posted to your Twitch chat.</p>
+    </div>
+    <a class="btn btn-outline-secondary" asp-controller="MyTools" asp-action="Index">Back to Tools and Connections</a>
+</div>
+
+@if (ViewData["StatusMessage"] is string statusMessage && !string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert alert-info">@statusMessage</div>
+}
+
+<div class="card">
+    <div class="card-header">Manage Timed Messages</div>
+    <div class="card-body">
+        <form asp-controller="TimedMessages" asp-action="Add" method="post" class="row g-2 mb-3">
+            <div class="col-12">
+                <input class="form-control" name="MessageText" placeholder="Message text" required />
+            </div>
+            <div class="col-sm-8 col-md-9">
+                <input class="form-control" type="number" min="1" name="IntervalMinutes" value="30" required />
+            </div>
+            <div class="col-sm-4 col-md-3 d-grid">
+                <button class="btn btn-primary" type="submit">Add Message</button>
+            </div>
+        </form>
+
+        @if (!Model.TimedMessages.Any())
+        {
+            <p class="text-muted mb-0">No timed messages yet.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Message</th>
+                            <th>Interval</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var msg in Model.TimedMessages)
+                    {
+                        <tr>
+                            <td>@msg.MessageText</td>
+                            <td>@msg.IntervalMinutes min</td>
+                            <td>@(msg.Enabled ? "Enabled" : "Disabled")</td>
+                            <td class="text-end">
+                                <form asp-controller="TimedMessages" asp-action="Toggle" asp-route-id="@msg.Id" method="post" class="d-inline">
+                                    <button class="btn btn-sm btn-outline-secondary" type="submit">Toggle</button>
+                                </form>
+                                <form asp-controller="TimedMessages" asp-action="Delete" asp-route-id="@msg.Id" method="post" class="d-inline">
+                                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

@@ -1,9 +1,9 @@
 @model TwitchTools.Web.Models.MyToolsViewModel
 @{
-    ViewData["Title"] = "My Tools";
+    ViewData["Title"] = "My Tools and Connections";
 }
 
-<h1>My Tools</h1>
+<h1>My Tools and Connections</h1>
 <p>Configure your own stream connections and automation settings.</p>
 
 @if (ViewData["StatusMessage"] is string statusMessage && !string.IsNullOrWhiteSpace(statusMessage))
@@ -11,20 +11,13 @@
     <div class="alert alert-info">@statusMessage</div>
 }
 
-@if (!string.IsNullOrWhiteSpace(Model.OverlayUrl))
-{
-    <div class="card mb-4">
-        <div class="card-header">Overlay URL</div>
-        <div class="card-body">
-            <p class="text-muted mb-2">Use this URL in OBS as a Browser Source.</p>
-            <div class="input-group mb-2">
-                <input id="overlayUrlInput" type="text" class="form-control font-monospace" value="@Model.OverlayUrl" readonly />
-                <button class="btn btn-outline-secondary" type="button" onclick="copyOverlayUrl()">Copy</button>
-            </div>
-            <div class="small text-muted">Token: <span class="font-monospace">@Model.OverlayToken</span></div>
-        </div>
+<div class="card mb-4">
+    <div class="card-header">OBS Overlay URLs</div>
+    <div class="card-body">
+        <p class="text-muted mb-2">Manage follower and subscriber overlay URLs from a dedicated page.</p>
+        <a class="btn btn-primary" asp-controller="OverlaySettings" asp-action="Index">Open Overlay Settings</a>
     </div>
-}
+</div>
 
 <div class="card mb-4">
     <div class="card-header">Twitch Profile and Connections</div>
@@ -80,19 +73,6 @@
     </div>
 </div>
 
-<script>
-    function copyOverlayUrl() {
-        const input = document.getElementById('overlayUrlInput');
-        if (!input) {
-            return;
-        }
-
-        input.select();
-        input.setSelectionRange(0, 99999);
-        navigator.clipboard.writeText(input.value);
-    }
-</script>
-
 <div class="card mb-4">
     <div class="card-header">BlueSky Connection</div>
     <div class="card-body">
@@ -125,53 +105,8 @@
         <div class="card h-100">
             <div class="card-header">Timed Chat Messages</div>
             <div class="card-body">
-                <form asp-controller="MyTools" asp-action="AddTimedMessage" method="post" class="row g-2 mb-3">
-                    <div class="col-12">
-                        <input class="form-control" name="MessageText" placeholder="Message text" required />
-                    </div>
-                    <div class="col-8">
-                        <input class="form-control" type="number" min="1" name="IntervalMinutes" value="30" required />
-                    </div>
-                    <div class="col-4 d-grid">
-                        <button class="btn btn-outline-primary" type="submit">Add</button>
-                    </div>
-                </form>
-
-                @if (!Model.TimedMessages.Any())
-                {
-                    <p class="text-muted">No timed messages yet.</p>
-                }
-                else
-                {
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Message</th>
-                                <th>Interval</th>
-                                <th>Status</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @foreach (var msg in Model.TimedMessages)
-                        {
-                            <tr>
-                                <td>@msg.MessageText</td>
-                                <td>@msg.IntervalMinutes min</td>
-                                <td>@(msg.Enabled ? "Enabled" : "Disabled")</td>
-                                <td class="text-end">
-                                    <form asp-controller="MyTools" asp-action="ToggleTimedMessage" asp-route-id="@msg.Id" method="post" class="d-inline">
-                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Toggle</button>
-                                    </form>
-                                    <form asp-controller="MyTools" asp-action="DeleteTimedMessage" asp-route-id="@msg.Id" method="post" class="d-inline">
-                                        <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
-                                    </form>
-                                </td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
-                }
+                <p class="text-muted">Manage recurring chat messages from a dedicated page.</p>
+                <a class="btn btn-primary" asp-controller="TimedMessages" asp-action="Index">Open Timed Messages</a>
             </div>
         </div>
     </div>

@@ -4,5 +4,6 @@ namespace TwitchTools.Web.Services;
 
 public interface IOverlayService
 {
-    Task<OverlayViewModel?> GetByTokenAsync(string overlayToken, CancellationToken cancellationToken);
+    Task<OverlayWidgetViewModel?> GetFollowerByTokenAsync(string overlayToken, CancellationToken cancellationToken);
+    Task<OverlayWidgetViewModel?> GetSubscriberByTokenAsync(string overlayToken, CancellationToken cancellationToken);
 }
