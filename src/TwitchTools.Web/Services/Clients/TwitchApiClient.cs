@@ -9,6 +9,11 @@ public sealed class TwitchApiClient(
     HttpClient httpClient,
     ILogger<TwitchApiClient> logger) : ITwitchApiClient
 {
+    private static readonly JsonSerializerOptions TwitchJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     public async Task<bool> IsStreamerLiveAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken)
     {
         using var request = CreateRequest(HttpMethod.Get, $"helix/streams?user_id={Uri.EscapeDataString(broadcasterUserId)}", authContext);
@@ -20,7 +25,10 @@ public sealed class TwitchApiClient(
         }
 
         await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var payload = await JsonSerializer.DeserializeAsync<HelixDataEnvelope<JsonElement>>(contentStream, cancellationToken: cancellationToken);
+        var payload = await JsonSerializer.DeserializeAsync<HelixDataEnvelope<JsonElement>>(
+            contentStream,
+            TwitchJsonOptions,
+            cancellationToken: cancellationToken);
         return payload?.Data.Count > 0;
     }
 
@@ -44,7 +52,10 @@ public sealed class TwitchApiClient(
         }
 
         await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var payload = await JsonSerializer.DeserializeAsync<HelixDataEnvelope<TwitchChatter>>(contentStream, cancellationToken: cancellationToken);
+        var payload = await JsonSerializer.DeserializeAsync<HelixDataEnvelope<TwitchChatter>>(
+            contentStream,
+            TwitchJsonOptions,
+            cancellationToken: cancellationToken);
         return payload?.Data.Select(x => x.UserId).Distinct(StringComparer.Ordinal).ToArray() ?? Array.Empty<string>();
     }
 
@@ -85,7 +96,10 @@ public sealed class TwitchApiClient(
         }
 
         await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var payload = await JsonSerializer.DeserializeAsync<TwitchScheduleResponse>(contentStream, cancellationToken: cancellationToken);
+        var payload = await JsonSerializer.DeserializeAsync<TwitchScheduleResponse>(
+            contentStream,
+            TwitchJsonOptions,
+            cancellationToken: cancellationToken);
         var data = payload?.Data;
         var segments = data?.Segments ?? [];
         var broadcasterLogin = string.IsNullOrWhiteSpace(data?.BroadcasterLogin) ? broadcasterUserId : data.BroadcasterLogin;
@@ -112,6 +126,7 @@ public sealed class TwitchApiClient(
 
     private sealed class HelixDataEnvelope<T>
     {
+        [JsonPropertyName("data")]
         public List<T> Data { get; init; } = [];
     }
 
@@ -123,6 +138,7 @@ public sealed class TwitchApiClient(
 
     private sealed class TwitchScheduleResponse
     {
+        [JsonPropertyName("data")]
         public TwitchScheduleData? Data { get; init; }
     }
 

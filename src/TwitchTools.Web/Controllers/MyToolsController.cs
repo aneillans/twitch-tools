@@ -22,6 +22,10 @@ public sealed class MyToolsController(
 {
     private const string TwitchOAuthStateCookie = "twitch_oauth_state";
     private const string TwitchOAuthModeCookie = "twitch_oauth_mode";
+    private static readonly JsonSerializerOptions TwitchJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
     [HttpGet("/my-tools")]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
@@ -211,7 +215,10 @@ public sealed class MyToolsController(
             }
 
             await using var tokenStream = await tokenResponse.Content.ReadAsStreamAsync(cancellationToken);
-            var tokenPayload = await JsonSerializer.DeserializeAsync<TwitchTokenResponse>(tokenStream, cancellationToken: cancellationToken);
+            var tokenPayload = await JsonSerializer.DeserializeAsync<TwitchTokenResponse>(
+                tokenStream,
+                TwitchJsonOptions,
+                cancellationToken: cancellationToken);
             if (string.IsNullOrWhiteSpace(tokenPayload?.AccessToken))
             {
                 TempData["StatusMessage"] = "Twitch token payload did not include an access token.";
@@ -231,7 +238,10 @@ public sealed class MyToolsController(
             }
 
             await using var userStream = await userResponse.Content.ReadAsStreamAsync(cancellationToken);
-            var userPayload = await JsonSerializer.DeserializeAsync<TwitchUserEnvelope>(userStream, cancellationToken: cancellationToken);
+            var userPayload = await JsonSerializer.DeserializeAsync<TwitchUserEnvelope>(
+                userStream,
+                TwitchJsonOptions,
+                cancellationToken: cancellationToken);
             var user = userPayload?.Data.FirstOrDefault();
             if (user is null || string.IsNullOrWhiteSpace(user.Id))
             {
@@ -508,6 +518,7 @@ public sealed class MyToolsController(
 
     private sealed class TwitchUserEnvelope
     {
+        [JsonPropertyName("data")]
         public List<TwitchUser> Data { get; init; } = [];
     }
 
