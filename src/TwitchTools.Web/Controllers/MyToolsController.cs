@@ -266,7 +266,7 @@ public sealed class MyToolsController(
 
     [HttpPost("/my-tools/twitch")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveTwitch(TwitchConnectionInput input, CancellationToken cancellationToken)
+    public async Task<IActionResult> SaveTwitch([Bind(Prefix = nameof(MyToolsViewModel.Twitch))] TwitchConnectionInput input, CancellationToken cancellationToken)
     {
         var ownerSubject = GetOwnerSubject();
         if (ownerSubject is null)
@@ -291,7 +291,7 @@ public sealed class MyToolsController(
 
     [HttpPost("/my-tools/bluesky")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveBlueSky(BlueSkyConnectionInput input, CancellationToken cancellationToken)
+    public async Task<IActionResult> SaveBlueSky([Bind(Prefix = nameof(MyToolsViewModel.BlueSky))] BlueSkyConnectionInput input, CancellationToken cancellationToken)
     {
         var ownerSubject = GetOwnerSubject();
         if (ownerSubject is null)
