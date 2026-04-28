@@ -186,6 +186,9 @@
                                     @(sync.LastSyncedUtc == DateTime.UnixEpoch ? "Never" : sync.LastSyncedUtc.ToString("yyyy-MM-dd HH:mm") + " UTC")
                                 </td>
                                 <td class="text-end">
+                                    <form asp-controller="MyTools" asp-action="SyncDiscordNow" asp-route-id="@sync.Id" method="post" class="d-inline me-1">
+                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Sync now</button>
+                                    </form>
                                     <form asp-controller="MyTools" asp-action="DeleteDiscordSync" asp-route-id="@sync.Id" method="post" class="d-inline">
                                         <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
                                     </form>

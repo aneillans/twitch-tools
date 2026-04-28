@@ -9,6 +9,7 @@ using TwitchTools.Web.Data;
 using TwitchTools.Web.Domain;
 using TwitchTools.Web.Models;
 using TwitchTools.Web.Options;
+using TwitchTools.Web.Services;
 
 namespace TwitchTools.Web.Controllers;
 
@@ -18,6 +19,7 @@ public sealed class MyToolsController(
     IOptions<TwitchOptions> twitchOptions,
     IOptions<DiscordOptions> discordOptions,
     IHttpClientFactory httpClientFactory,
+    IDiscordScheduleSyncService discordSyncService,
     ILogger<MyToolsController> logger) : Controller
 {
     private const string TwitchOAuthStateCookie = "twitch_oauth_state";
@@ -335,6 +337,33 @@ public sealed class MyToolsController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         TempData["StatusMessage"] = "Discord server added. Scheduled events will sync on the next cycle.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost("/my-tools/discord-syncs/{id:long}/sync")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SyncDiscordNow(long id, CancellationToken cancellationToken)
+    {
+        var sync = await dbContext.DiscordGuildSyncs
+            .Include(x => x.Streamer)
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (sync is null || !IsOwner(sync.Streamer.OwnerSubject))
+        {
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            await discordSyncService.SyncScheduleAsync(sync.Streamer, cancellationToken);
+            TempData["StatusMessage"] = $"Discord schedule synced for server {sync.GuildId}.";
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Manual Discord sync failed for guild {GuildId}.", sync.GuildId);
+            TempData["StatusMessage"] = $"Discord sync failed for server {sync.GuildId}. Check logs for details.";
+        }
+
         return RedirectToAction(nameof(Index));
     }
 
