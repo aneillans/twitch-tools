@@ -9,6 +9,8 @@ using TwitchTools.Web.Data;
 using TwitchTools.Web.Domain;
 using TwitchTools.Web.Models;
 using TwitchTools.Web.Options;
+using TwitchTools.Web.Services;
+using TwitchTools.Web.Services.Clients;
 
 namespace TwitchTools.Web.Controllers;
 
@@ -18,10 +20,16 @@ public sealed class MyToolsController(
     IOptions<TwitchOptions> twitchOptions,
     IOptions<DiscordOptions> discordOptions,
     IHttpClientFactory httpClientFactory,
+    IDiscordScheduleSyncService discordSyncService,
+    IBlueSkyApiClient blueSkyApiClient,
     ILogger<MyToolsController> logger) : Controller
 {
     private const string TwitchOAuthStateCookie = "twitch_oauth_state";
     private const string TwitchOAuthModeCookie = "twitch_oauth_mode";
+    private static readonly JsonSerializerOptions TwitchJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
     [HttpGet("/my-tools")]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
@@ -44,20 +52,6 @@ public sealed class MyToolsController(
             return View(new MyToolsViewModel());
         }
 
-        var timedMessages = await dbContext.TimedChatMessages
-            .AsNoTracking()
-            .Where(x => x.StreamerId == streamer.Id)
-            .OrderBy(x => x.Id)
-            .Select(x => new TimedMessageItem
-            {
-                Id = x.Id,
-                MessageText = x.MessageText,
-                IntervalMinutes = (int)Math.Max(1, x.Interval.TotalMinutes),
-                Enabled = x.Enabled,
-                LastSentUtc = x.LastSentUtc
-            })
-            .ToListAsync(cancellationToken);
-
         var discordSyncs = await dbContext.DiscordGuildSyncs
             .AsNoTracking()
             .Where(x => x.StreamerId == streamer.Id)
@@ -77,6 +71,7 @@ public sealed class MyToolsController(
             {
                 DisplayName = streamer.DisplayName,
                 TwitchUserId = streamer.TwitchUserId,
+                TwitchBotUserId = streamer.TwitchBotUserId,
                 TwitchStreamerAccessToken = streamer.TwitchStreamerAccessToken,
                 TwitchStreamerRefreshToken = streamer.TwitchStreamerRefreshToken,
                 TwitchClientId = streamer.TwitchClientId,
@@ -88,9 +83,6 @@ public sealed class MyToolsController(
                 BlueSkyIdentifier = streamer.BlueSkyIdentifier,
                 BlueSkyAppPassword = streamer.BlueSkyAppPassword
             },
-            OverlayToken = streamer.OverlayToken,
-            OverlayUrl = BuildOverlayUrl(streamer.OverlayToken),
-            TimedMessages = timedMessages,
             DiscordSyncs = discordSyncs
         };
 
@@ -211,7 +203,10 @@ public sealed class MyToolsController(
             }
 
             await using var tokenStream = await tokenResponse.Content.ReadAsStreamAsync(cancellationToken);
-            var tokenPayload = await JsonSerializer.DeserializeAsync<TwitchTokenResponse>(tokenStream, cancellationToken: cancellationToken);
+            var tokenPayload = await JsonSerializer.DeserializeAsync<TwitchTokenResponse>(
+                tokenStream,
+                TwitchJsonOptions,
+                cancellationToken: cancellationToken);
             if (string.IsNullOrWhiteSpace(tokenPayload?.AccessToken))
             {
                 TempData["StatusMessage"] = "Twitch token payload did not include an access token.";
@@ -231,7 +226,10 @@ public sealed class MyToolsController(
             }
 
             await using var userStream = await userResponse.Content.ReadAsStreamAsync(cancellationToken);
-            var userPayload = await JsonSerializer.DeserializeAsync<TwitchUserEnvelope>(userStream, cancellationToken: cancellationToken);
+            var userPayload = await JsonSerializer.DeserializeAsync<TwitchUserEnvelope>(
+                userStream,
+                TwitchJsonOptions,
+                cancellationToken: cancellationToken);
             var user = userPayload?.Data.FirstOrDefault();
             if (user is null || string.IsNullOrWhiteSpace(user.Id))
             {
@@ -272,7 +270,7 @@ public sealed class MyToolsController(
 
     [HttpPost("/my-tools/twitch")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveTwitch(TwitchConnectionInput input, CancellationToken cancellationToken)
+    public async Task<IActionResult> SaveTwitch([Bind(Prefix = nameof(MyToolsViewModel.Twitch))] TwitchConnectionInput input, CancellationToken cancellationToken)
     {
         var ownerSubject = GetOwnerSubject();
         if (ownerSubject is null)
@@ -295,9 +293,34 @@ public sealed class MyToolsController(
         return RedirectToAction(nameof(Index));
     }
 
+    [HttpPost("/my-tools/bluesky/test")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TestBlueSky(CancellationToken cancellationToken)
+    {
+        var ownerSubject = GetOwnerSubject();
+        if (ownerSubject is null)
+        {
+            return Challenge();
+        }
+
+        var streamer = await GetOwnedStreamerAsync(cancellationToken);
+        if (streamer is null || string.IsNullOrWhiteSpace(streamer.BlueSkyIdentifier) || string.IsNullOrWhiteSpace(streamer.BlueSkyAppPassword))
+        {
+            TempData["StatusMessage"] = "Save your BlueSky identifier and app password before testing the connection.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var credentials = new BlueSkyCredentials(streamer.BlueSkyIdentifier, streamer.BlueSkyAppPassword);
+        var ok = await blueSkyApiClient.TestConnectionAsync(credentials, cancellationToken);
+        TempData["StatusMessage"] = ok
+            ? "BlueSky connection successful."
+            : "BlueSky connection failed. Check your identifier and app password.";
+        return RedirectToAction(nameof(Index));
+    }
+
     [HttpPost("/my-tools/bluesky")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveBlueSky(BlueSkyConnectionInput input, CancellationToken cancellationToken)
+    public async Task<IActionResult> SaveBlueSky([Bind(Prefix = nameof(MyToolsViewModel.BlueSky))] BlueSkyConnectionInput input, CancellationToken cancellationToken)
     {
         var ownerSubject = GetOwnerSubject();
         if (ownerSubject is null)
@@ -311,69 +334,6 @@ public sealed class MyToolsController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         TempData["StatusMessage"] = "BlueSky settings saved.";
-        return RedirectToAction(nameof(Index));
-    }
-
-    [HttpPost("/my-tools/timed-messages")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddTimedMessage(AddTimedMessageInput input, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(input.MessageText) || input.IntervalMinutes < 1)
-        {
-            return RedirectToAction(nameof(Index));
-        }
-
-        var streamer = await GetOwnedStreamerAsync(cancellationToken);
-        if (streamer is null)
-        {
-            return RedirectToAction(nameof(Index));
-        }
-
-        dbContext.TimedChatMessages.Add(new TimedChatMessage
-        {
-            StreamerId = streamer.Id,
-            MessageText = input.MessageText.Trim(),
-            Interval = TimeSpan.FromMinutes(input.IntervalMinutes),
-            Enabled = true
-        });
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToAction(nameof(Index));
-    }
-
-    [HttpPost("/my-tools/timed-messages/{id:long}/toggle")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ToggleTimedMessage(long id, CancellationToken cancellationToken)
-    {
-        var message = await dbContext.TimedChatMessages
-            .Include(x => x.Streamer)
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-
-        if (message is null || !IsOwner(message.Streamer.OwnerSubject))
-        {
-            return RedirectToAction(nameof(Index));
-        }
-
-        message.Enabled = !message.Enabled;
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToAction(nameof(Index));
-    }
-
-    [HttpPost("/my-tools/timed-messages/{id:long}/delete")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteTimedMessage(long id, CancellationToken cancellationToken)
-    {
-        var message = await dbContext.TimedChatMessages
-            .Include(x => x.Streamer)
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-
-        if (message is null || !IsOwner(message.Streamer.OwnerSubject))
-        {
-            return RedirectToAction(nameof(Index));
-        }
-
-        dbContext.TimedChatMessages.Remove(message);
-        await dbContext.SaveChangesAsync(cancellationToken);
         return RedirectToAction(nameof(Index));
     }
 
@@ -404,6 +364,33 @@ public sealed class MyToolsController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         TempData["StatusMessage"] = "Discord server added. Scheduled events will sync on the next cycle.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost("/my-tools/discord-syncs/{id:long}/sync")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SyncDiscordNow(long id, CancellationToken cancellationToken)
+    {
+        var sync = await dbContext.DiscordGuildSyncs
+            .Include(x => x.Streamer)
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (sync is null || !IsOwner(sync.Streamer.OwnerSubject))
+        {
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            await discordSyncService.SyncScheduleAsync(sync.Streamer, cancellationToken);
+            TempData["StatusMessage"] = $"Discord schedule synced for server {sync.GuildId}.";
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Manual Discord sync failed for guild {GuildId}.", sync.GuildId);
+            TempData["StatusMessage"] = $"Discord sync failed for server {sync.GuildId}. Check logs for details.";
+        }
+
         return RedirectToAction(nameof(Index));
     }
 
@@ -443,6 +430,8 @@ public sealed class MyToolsController(
         if (streamer is not null)
         {
             streamer.OwnerEmail = ownerEmail;
+            streamer.FollowerOverlayToken = EnsureToken(streamer.FollowerOverlayToken, streamer.OverlayToken);
+            streamer.SubscriberOverlayToken = EnsureToken(streamer.SubscriberOverlayToken);
             return streamer;
         }
 
@@ -451,7 +440,9 @@ public sealed class MyToolsController(
             Id = Guid.NewGuid(),
             OwnerSubject = ownerSubject,
             OwnerEmail = ownerEmail,
-            OverlayToken = Guid.NewGuid().ToString("N")
+            OverlayToken = Guid.NewGuid().ToString("N"),
+            FollowerOverlayToken = Guid.NewGuid().ToString("N"),
+            SubscriberOverlayToken = Guid.NewGuid().ToString("N")
         };
 
         dbContext.Streamers.Add(streamer);
@@ -492,9 +483,19 @@ public sealed class MyToolsController(
             + "&scope=" + Uri.EscapeDataString(options.InviteScopes);
     }
 
-    private string BuildOverlayUrl(string overlayToken)
+    private static string EnsureToken(string? token, string? fallbackToken = null)
     {
-        return $"{Request.Scheme}://{Request.Host}{Request.PathBase}/overlay/{overlayToken}";
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            return token;
+        }
+
+        if (!string.IsNullOrWhiteSpace(fallbackToken))
+        {
+            return fallbackToken;
+        }
+
+        return Guid.NewGuid().ToString("N");
     }
 
     private sealed class TwitchTokenResponse
@@ -508,6 +509,7 @@ public sealed class MyToolsController(
 
     private sealed class TwitchUserEnvelope
     {
+        [JsonPropertyName("data")]
         public List<TwitchUser> Data { get; init; } = [];
     }
 

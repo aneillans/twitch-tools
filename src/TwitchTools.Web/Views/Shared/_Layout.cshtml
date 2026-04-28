@@ -26,7 +26,13 @@
                         @if (User.Identity?.IsAuthenticated == true)
                         {
                             <li class="nav-item">
-                                <a class="nav-link text-dark" asp-area="" asp-controller="MyTools" asp-action="Index">My Tools</a>
+                                <a class="nav-link text-dark" asp-area="" asp-controller="MyTools" asp-action="Index">Tools and Connections</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-area="" asp-controller="TimedMessages" asp-action="Index">Timed Messages</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-area="" asp-controller="OverlaySettings" asp-action="Index">Overlay URLs</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link text-dark" asp-area="" asp-controller="Dashboard" asp-action="Index">Dashboard</a>

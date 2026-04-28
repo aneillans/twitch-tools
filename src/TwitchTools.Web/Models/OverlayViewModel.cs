@@ -1,9 +1,9 @@
 namespace TwitchTools.Web.Models;
 
-public sealed class OverlayViewModel
+public sealed class OverlayWidgetViewModel
 {
-    public string? LastFollowerName { get; init; }
-    public DateTime? LastFollowerUtc { get; init; }
-    public string? LastSubscriberName { get; init; }
-    public DateTime? LastSubscriberUtc { get; init; }
+    public string Title { get; init; } = string.Empty;
+    public string EmptyMessage { get; init; } = string.Empty;
+    public string? DisplayValue { get; init; }
+    public DateTime? EventUtc { get; init; }
 }

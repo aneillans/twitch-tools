@@ -1,0 +1,54 @@
+@model TwitchTools.Web.Models.OverlaySettingsViewModel
+@{
+    ViewData["Title"] = "Overlay URLs";
+}
+
+<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">OBS Overlay URLs</h1>
+        <p class="text-muted mb-0">Use separate browser source URLs for follower and subscriber widgets.</p>
+    </div>
+    <a class="btn btn-outline-secondary" asp-controller="MyTools" asp-action="Index">Back to Tools and Connections</a>
+</div>
+
+@if (ViewData["StatusMessage"] is string statusMessage && !string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert alert-info">@statusMessage</div>
+}
+
+<div class="card mb-4">
+    <div class="card-header">Follower Overlay</div>
+    <div class="card-body">
+        <p class="text-muted mb-2">Add this URL as an OBS Browser Source for follower alerts.</p>
+        <div class="input-group mb-2">
+            <input id="followerOverlayUrlInput" type="text" class="form-control font-monospace" value="@Model.FollowerOverlayUrl" readonly />
+            <button class="btn btn-outline-secondary" type="button" onclick="copyField('followerOverlayUrlInput')">Copy</button>
+        </div>
+        <div class="small text-muted">Token: <span class="font-monospace">@Model.FollowerOverlayToken</span></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Subscriber Overlay</div>
+    <div class="card-body">
+        <p class="text-muted mb-2">Add this URL as an OBS Browser Source for subscriber alerts.</p>
+        <div class="input-group mb-2">
+            <input id="subscriberOverlayUrlInput" type="text" class="form-control font-monospace" value="@Model.SubscriberOverlayUrl" readonly />
+            <button class="btn btn-outline-secondary" type="button" onclick="copyField('subscriberOverlayUrlInput')">Copy</button>
+        </div>
+        <div class="small text-muted">Token: <span class="font-monospace">@Model.SubscriberOverlayToken</span></div>
+    </div>
+</div>
+
+<script>
+    function copyField(inputId) {
+        const input = document.getElementById(inputId);
+        if (!input) {
+            return;
+        }
+
+        input.select();
+        input.setSelectionRange(0, 99999);
+        navigator.clipboard.writeText(input.value);
+    }
+</script>

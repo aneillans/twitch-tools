@@ -1,0 +1,33 @@
+@model TwitchTools.Web.Models.OverlayWidgetViewModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+        :root {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff;
+        }
+
+        body {
+            margin: 0;
+            background: transparent;
+        }
+
+        .value {
+            margin: 0;
+            padding: 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+            line-height: 1.2;
+        }
+    </style>
+</head>
+<body>
+<div class="value">@(Model.DisplayValue ?? string.Empty)</div>
+</body>
+</html>

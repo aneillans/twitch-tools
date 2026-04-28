@@ -5,16 +5,27 @@ public sealed class MyToolsViewModel
     public bool HasProfile { get; init; }
     public TwitchConnectionInput Twitch { get; init; } = new();
     public BlueSkyConnectionInput BlueSky { get; init; } = new();
-    public string? OverlayToken { get; init; }
-    public string? OverlayUrl { get; init; }
-    public IReadOnlyCollection<TimedMessageItem> TimedMessages { get; init; } = [];
     public IReadOnlyCollection<DiscordSyncItem> DiscordSyncs { get; init; } = [];
+}
+
+public sealed class TimedMessagesPageViewModel
+{
+    public IReadOnlyCollection<TimedMessageItem> TimedMessages { get; init; } = [];
+}
+
+public sealed class OverlaySettingsViewModel
+{
+    public string FollowerOverlayUrl { get; init; } = string.Empty;
+    public string SubscriberOverlayUrl { get; init; } = string.Empty;
+    public string FollowerOverlayToken { get; init; } = string.Empty;
+    public string SubscriberOverlayToken { get; init; } = string.Empty;
 }
 
 public sealed class TwitchConnectionInput
 {
     public string DisplayName { get; set; } = string.Empty;
     public string TwitchUserId { get; set; } = string.Empty;
+    public string? TwitchBotUserId { get; set; }
     public string TwitchStreamerAccessToken { get; set; } = string.Empty;
     public string? TwitchStreamerRefreshToken { get; set; }
     public string? TwitchClientId { get; set; }

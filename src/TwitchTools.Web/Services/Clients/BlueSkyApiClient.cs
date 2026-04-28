@@ -124,6 +124,12 @@ public sealed class BlueSkyApiClient(
         return await JsonSerializer.DeserializeAsync<CreateSessionResponse>(stream, cancellationToken: cancellationToken);
     }
 
+    public async Task<bool> TestConnectionAsync(BlueSkyCredentials credentials, CancellationToken cancellationToken)
+    {
+        var session = await CreateSessionAsync(credentials, cancellationToken);
+        return session is not null && !string.IsNullOrWhiteSpace(session.Did);
+    }
+
     private static HttpRequestMessage CreateAuthenticatedRequest(HttpMethod method, string relativePath, string jwt, object payload)
     {
         var request = new HttpRequestMessage(method, relativePath);

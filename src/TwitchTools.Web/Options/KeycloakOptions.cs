@@ -9,4 +9,5 @@ public sealed class KeycloakOptions
     public string ClientId { get; set; } = string.Empty;
     public string ClientSecret { get; set; } = string.Empty;
     public bool RequireHttpsMetadata { get; set; } = true;
+    public string CallbackPath { get; set; } = "/signin-oidc";
 }

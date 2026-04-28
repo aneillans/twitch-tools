@@ -2,6 +2,7 @@ using Exceptionless;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using System.Text.Json;
@@ -21,6 +22,16 @@ builder.Services.Configure<TwitchOptions>(builder.Configuration.GetSection(Twitc
 builder.Services.Configure<BlueSkyOptions>(builder.Configuration.GetSection(BlueSkyOptions.SectionName));
 builder.Services.Configure<DiscordOptions>(builder.Configuration.GetSection(DiscordOptions.SectionName));
 builder.Services.Configure<EncryptionOptions>(builder.Configuration.GetSection(EncryptionOptions.SectionName));
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
+        | ForwardedHeaders.XForwardedProto
+        | ForwardedHeaders.XForwardedHost;
+
+    // Accept forwarded headers from container/proxy networks.
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddAuthentication(options =>
     {
@@ -48,6 +59,7 @@ builder.Services.AddAuthentication(options =>
         options.SaveTokens = true;
         options.RequireHttpsMetadata = keycloak.RequireHttpsMetadata;
         options.GetClaimsFromUserInfoEndpoint = true;
+        options.CallbackPath = keycloak.CallbackPath;
 
         options.Scope.Clear();
         options.Scope.Add("openid");
@@ -129,6 +141,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseExceptionless();
+app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseRouting();
 app.UseAuthentication();
