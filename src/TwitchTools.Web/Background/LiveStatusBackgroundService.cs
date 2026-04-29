@@ -170,7 +170,7 @@ public sealed class LiveStatusBackgroundService(
             clientId,
             streamer.TwitchStreamerAccessToken,
             streamer.TwitchBotUserId ?? options.DefaultBotUserId,
-            streamer.TwitchModeratorUserId ?? options.DefaultModeratorUserId);
+            streamer.TwitchBotUserId ?? options.DefaultBotUserId);
     }
 
     private sealed record DiscordRefreshState(DateTime NextAttemptUtc, int ConsecutiveFailures);

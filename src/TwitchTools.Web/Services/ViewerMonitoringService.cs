@@ -34,12 +34,17 @@ public sealed class ViewerMonitoringService(
             var isLive = await twitchApiClient.IsStreamerLiveAsync(streamer.TwitchUserId, auth, cancellationToken);
             if (!isLive)
             {
+                logger.LogDebug("Skipping viewer sample collection for {Streamer} because the channel is not currently live.", streamer.DisplayName);
                 continue;
             }
 
             var chatterIds = await twitchApiClient.GetCurrentChattersAsync(streamer.TwitchUserId, auth, cancellationToken);
             if (chatterIds.Count == 0)
             {
+                logger.LogInformation(
+                    "Viewer sample collection for {Streamer} returned zero chatters while live. BotUserId={BotUserId}.",
+                    streamer.DisplayName,
+                    auth.BotUserId);
                 continue;
             }
 
@@ -63,6 +68,11 @@ public sealed class ViewerMonitoringService(
                     CapturedUtc = DateTime.UtcNow
                 });
             }
+
+            logger.LogInformation(
+                "Recorded viewer samples for {Streamer}: {ViewerCount} active chatters.",
+                streamer.DisplayName,
+                chatterIds.Count);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

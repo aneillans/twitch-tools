@@ -20,7 +20,12 @@ public sealed class TwitchApiClient(
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Twitch streams check failed for {Broadcaster}: {StatusCode}", broadcasterUserId, response.StatusCode);
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogWarning(
+                "Twitch streams check failed for {Broadcaster}: {StatusCode}. Response: {ResponseBody}",
+                broadcasterUserId,
+                response.StatusCode,
+                errorBody);
             return false;
         }
 
@@ -47,7 +52,12 @@ public sealed class TwitchApiClient(
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Twitch chatter poll failed for {Broadcaster}: {StatusCode}", broadcasterUserId, response.StatusCode);
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogWarning(
+                "Twitch chatter poll failed for {Broadcaster}: {StatusCode}. Response: {ResponseBody}",
+                broadcasterUserId,
+                response.StatusCode,
+                errorBody);
             return Array.Empty<string>();
         }
 
@@ -131,7 +141,12 @@ public sealed class TwitchApiClient(
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Twitch follower fetch failed for {Broadcaster}: {StatusCode}", broadcasterUserId, response.StatusCode);
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogWarning(
+                "Twitch follower fetch failed for {Broadcaster}: {StatusCode}. Response: {ResponseBody}",
+                broadcasterUserId,
+                response.StatusCode,
+                errorBody);
             return null;
         }
 
@@ -159,7 +174,12 @@ public sealed class TwitchApiClient(
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Twitch subscriber fetch failed for {Broadcaster}: {StatusCode}", broadcasterUserId, response.StatusCode);
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogWarning(
+                "Twitch subscriber fetch failed for {Broadcaster}: {StatusCode}. Response: {ResponseBody}",
+                broadcasterUserId,
+                response.StatusCode,
+                errorBody);
             return null;
         }
 

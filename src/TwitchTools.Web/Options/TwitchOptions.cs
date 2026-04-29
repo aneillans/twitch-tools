@@ -11,5 +11,4 @@ public sealed class TwitchOptions
     public string OAuthRedirectUri { get; set; } = "http://localhost:8080/my-tools/connect/twitch/callback";
     public string OAuthScopes { get; set; } = "moderator:read:chatters moderator:read:followers user:write:chat channel:read:subscriptions";
     public string? DefaultBotUserId { get; set; }
-    public string? DefaultModeratorUserId { get; set; }
 }
