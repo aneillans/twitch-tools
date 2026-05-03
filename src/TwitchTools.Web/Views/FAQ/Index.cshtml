@@ -1,0 +1,105 @@
+@model TwitchTools.Web.Models.MyToolsViewModel
+@{
+    ViewData["Title"] = "FAQ and Documentation";
+}
+
+<h1>FAQ and Documentation</h1>
+<p>Find answers to common questions and learn how to use the tools.</p>
+
+<h2>Frequently Asked Questions</h2>
+
+<div class="accordion mt-3" id="faqAccordion">
+
+    <div class="accordion-item">
+        <h3 class="accordion-header" id="faq1-heading">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1" aria-expanded="true" aria-controls="faq1">
+                What is this site and what does it do?
+            </button>
+        </h3>
+        <div id="faq1" class="accordion-collapse collapse show" aria-labelledby="faq1-heading" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+                To provide some basic additional functionality for a streamer, such as tracking viewer statistics, sending timed messages to your chat, sending "I'm Live!" notifications where possible, and more! And all without having any corporate ties.
+            </div>
+        </div>
+    </div>
+
+    <div class="accordion-item">
+        <h3 class="accordion-header" id="faq2-heading">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2" aria-expanded="false" aria-controls="faq2">
+                How do I get started?
+            </button>
+        </h3>
+        <div id="faq2" class="accordion-collapse collapse" aria-labelledby="faq2-heading" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+                To get started, sign in with your Twitch account and explore the available tools. Each tool has its own setup instructions and usage guidelines; such as needing to connect to your social media networks (BlueSky).
+            </div>
+        </div>
+    </div>
+
+    <div class="accordion-item">
+        <h3 class="accordion-header" id="faq3-heading">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3" aria-expanded="false" aria-controls="faq3">
+                How do I connect my Twitch account?
+            </button>
+        </h3>
+        <div id="faq3" class="accordion-collapse collapse" aria-labelledby="faq3-heading" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+                Simply click on the Connect Twitch Account button on the My Tools page, and you will be prompted to accept the authorisation.  There is also the option to authenticate a bot account, however, before clicking that button, please ensure you LOG OUT of your Twitch account so you can login when prompted! <br/>
+                You will be able to see the status of your Twitch Connections and should there be any issues identified with the connections, simply try reconnecting.
+            </div>
+        </div>
+    </div>
+@* 
+    <div class="accordion-item">
+        <h3 class="accordion-header" id="faq4-heading">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4" aria-expanded="false" aria-controls="faq4">
+                How do timed chat messages work?
+            </button>
+        </h3>
+        <div id="faq4" class="accordion-collapse collapse" aria-labelledby="faq4-heading" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Placeholder explanation of how to set up and manage timed chat messages.
+            </div>
+        </div>
+    </div>
+
+    <div class="accordion-item">
+        <h3 class="accordion-header" id="faq5-heading">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5" aria-expanded="false" aria-controls="faq5">
+                How do I use the stream overlays?
+            </button>
+        </h3>
+        <div id="faq5" class="accordion-collapse collapse" aria-labelledby="faq5-heading" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Placeholder guide for configuring and using stream overlays in OBS or other streaming software.
+            </div>
+        </div>
+    </div>
+
+    <div class="accordion-item">
+        <h3 class="accordion-header" id="faq6-heading">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq6" aria-expanded="false" aria-controls="faq6">
+                How is viewer data collected and stored?
+            </button>
+        </h3>
+        <div id="faq6" class="accordion-collapse collapse" aria-labelledby="faq6-heading" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Placeholder explanation of viewer monitoring, data retention policies, and privacy considerations.
+            </div>
+        </div>
+    </div>
+
+    <div class="accordion-item">
+        <h3 class="accordion-header" id="faq7-heading">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq7" aria-expanded="false" aria-controls="faq7">
+                I'm having trouble logging in. What should I do?
+            </button>
+        </h3>
+        <div id="faq7" class="accordion-collapse collapse" aria-labelledby="faq7-heading" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Placeholder troubleshooting steps for common authentication and login issues.
+            </div>
+        </div>
+    </div> *@
+
+</div>
