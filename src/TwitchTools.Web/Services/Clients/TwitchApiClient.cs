@@ -14,13 +14,79 @@ public sealed class TwitchApiClient(
         PropertyNameCaseInsensitive = true
     };
 
+    public async Task<TwitchTokenValidationResult> ValidateAccessTokenAsync(string accessToken, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://id.twitch.tv/oauth2/validate");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            return new TwitchTokenValidationResult(false, null, null, null, null, errorBody);
+        }
+
+        await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var payload = await JsonSerializer.DeserializeAsync<TwitchTokenValidateResponse>(
+            contentStream,
+            TwitchJsonOptions,
+            cancellationToken: cancellationToken);
+
+        return new TwitchTokenValidationResult(
+            true,
+            payload?.ClientId,
+            payload?.Login,
+            payload?.UserId,
+            payload?.ExpiresIn,
+            null);
+    }
+
+    public async Task<TwitchTokenRefreshResult> RefreshAccessTokenAsync(string refreshToken, string clientId, string clientSecret, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://id.twitch.tv/oauth2/token")
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "refresh_token",
+                ["refresh_token"] = refreshToken,
+                ["client_id"] = clientId,
+                ["client_secret"] = clientSecret
+            })
+        };
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            return new TwitchTokenRefreshResult(false, null, null, null, errorBody);
+        }
+
+        await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var payload = await JsonSerializer.DeserializeAsync<TwitchRefreshTokenResponse>(
+            contentStream,
+            TwitchJsonOptions,
+            cancellationToken: cancellationToken);
+
+        return new TwitchTokenRefreshResult(
+            true,
+            payload?.AccessToken,
+            payload?.RefreshToken,
+            payload?.ExpiresIn,
+            null);
+    }
+
     public async Task<bool> IsStreamerLiveAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken)
     {
         using var request = CreateRequest(HttpMethod.Get, $"helix/streams?user_id={Uri.EscapeDataString(broadcasterUserId)}", authContext);
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Twitch streams check failed for {Broadcaster}: {StatusCode}", broadcasterUserId, response.StatusCode);
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogWarning(
+                "Twitch streams check failed for {Broadcaster}: {StatusCode}. Response: {ResponseBody}",
+                broadcasterUserId,
+                response.StatusCode,
+                errorBody);
             return false;
         }
 
@@ -47,7 +113,12 @@ public sealed class TwitchApiClient(
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Twitch chatter poll failed for {Broadcaster}: {StatusCode}", broadcasterUserId, response.StatusCode);
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogWarning(
+                "Twitch chatter poll failed for {Broadcaster}: {StatusCode}. Response: {ResponseBody}",
+                broadcasterUserId,
+                response.StatusCode,
+                errorBody);
             return Array.Empty<string>();
         }
 
@@ -131,7 +202,12 @@ public sealed class TwitchApiClient(
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Twitch follower fetch failed for {Broadcaster}: {StatusCode}", broadcasterUserId, response.StatusCode);
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogWarning(
+                "Twitch follower fetch failed for {Broadcaster}: {StatusCode}. Response: {ResponseBody}",
+                broadcasterUserId,
+                response.StatusCode,
+                errorBody);
             return null;
         }
 
@@ -159,7 +235,12 @@ public sealed class TwitchApiClient(
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Twitch subscriber fetch failed for {Broadcaster}: {StatusCode}", broadcasterUserId, response.StatusCode);
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogWarning(
+                "Twitch subscriber fetch failed for {Broadcaster}: {StatusCode}. Response: {ResponseBody}",
+                broadcasterUserId,
+                response.StatusCode,
+                errorBody);
             return null;
         }
 
@@ -175,6 +256,56 @@ public sealed class TwitchApiClient(
         }
 
         return new TwitchSubscriberEvent(item.UserId, item.UserLogin, item.UserName);
+    }
+
+    public async Task<IReadOnlyDictionary<string, TwitchUserProfile>> GetUsersByIdsAsync(
+        IReadOnlyCollection<string> userIds,
+        TwitchAuthContext authContext,
+        CancellationToken cancellationToken)
+    {
+        if (userIds.Count == 0)
+        {
+            return new Dictionary<string, TwitchUserProfile>(StringComparer.Ordinal);
+        }
+
+        var distinctIds = userIds
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (distinctIds.Length == 0)
+        {
+            return new Dictionary<string, TwitchUserProfile>(StringComparer.Ordinal);
+        }
+
+        // Twitch users endpoint supports batching by repeating id query values.
+        var query = string.Join("&", distinctIds.Select(x => $"id={Uri.EscapeDataString(x)}"));
+        using var request = CreateRequest(HttpMethod.Get, $"helix/users?{query}", authContext);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogWarning(
+                "Twitch user lookup failed: {StatusCode}. Response: {ResponseBody}",
+                response.StatusCode,
+                errorBody);
+            return new Dictionary<string, TwitchUserProfile>(StringComparer.Ordinal);
+        }
+
+        await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var payload = await JsonSerializer.DeserializeAsync<HelixDataEnvelope<TwitchUserItem>>(
+            contentStream,
+            TwitchJsonOptions,
+            cancellationToken: cancellationToken);
+
+        return payload?.Data
+            .Where(x => !string.IsNullOrWhiteSpace(x.Id))
+            .ToDictionary(
+                x => x.Id,
+                x => new TwitchUserProfile(x.Id, x.Login, x.DisplayName),
+                StringComparer.Ordinal)
+            ?? new Dictionary<string, TwitchUserProfile>(StringComparer.Ordinal);
     }
 
     private static HttpRequestMessage CreateRequest(HttpMethod method, string relativePath, TwitchAuthContext authContext)
@@ -261,5 +392,44 @@ public sealed class TwitchApiClient(
 
         [JsonPropertyName("user_name")]
         public string? UserName { get; init; }
+    }
+
+    private sealed class TwitchTokenValidateResponse
+    {
+        [JsonPropertyName("client_id")]
+        public string? ClientId { get; init; }
+
+        [JsonPropertyName("login")]
+        public string? Login { get; init; }
+
+        [JsonPropertyName("user_id")]
+        public string? UserId { get; init; }
+
+        [JsonPropertyName("expires_in")]
+        public int? ExpiresIn { get; init; }
+    }
+
+    private sealed class TwitchRefreshTokenResponse
+    {
+        [JsonPropertyName("access_token")]
+        public string? AccessToken { get; init; }
+
+        [JsonPropertyName("refresh_token")]
+        public string? RefreshToken { get; init; }
+
+        [JsonPropertyName("expires_in")]
+        public int? ExpiresIn { get; init; }
+    }
+
+    private sealed class TwitchUserItem
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; init; } = string.Empty;
+
+        [JsonPropertyName("login")]
+        public string? Login { get; init; }
+
+        [JsonPropertyName("display_name")]
+        public string? DisplayName { get; init; }
     }
 }

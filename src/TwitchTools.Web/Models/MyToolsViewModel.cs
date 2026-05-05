@@ -26,11 +26,27 @@ public sealed class TwitchConnectionInput
     public string DisplayName { get; set; } = string.Empty;
     public string TwitchUserId { get; set; } = string.Empty;
     public string? TwitchBotUserId { get; set; }
+    public TwitchTokenStatusViewModel StreamerTokenStatus { get; init; } = TwitchTokenStatusViewModel.Missing();
+    public TwitchTokenStatusViewModel BotTokenStatus { get; init; } = TwitchTokenStatusViewModel.Missing();
     public string TwitchStreamerAccessToken { get; set; } = string.Empty;
     public string? TwitchStreamerRefreshToken { get; set; }
     public string? TwitchClientId { get; set; }
     public string? TwitchBotAccessToken { get; set; }
     public string? TwitchBotRefreshToken { get; set; }
+}
+
+public sealed class TwitchTokenStatusViewModel
+{
+    public string State { get; init; } = string.Empty;
+    public string Details { get; init; } = string.Empty;
+    public string TextClass { get; init; } = "text-muted";
+
+    public static TwitchTokenStatusViewModel Missing() => new()
+    {
+        State = "Missing",
+        Details = "No access token saved.",
+        TextClass = "text-muted"
+    };
 }
 
 public sealed class BlueSkyConnectionInput

@@ -39,6 +39,9 @@
                     <div class="col-md-6">
                         <label class="form-label">Streamer Account</label>
                         <input class="form-control" value="@(string.IsNullOrWhiteSpace(Model.Twitch.TwitchUserId) ? "Not connected" : "Connected")" readonly />
+                        <div class="small mt-1 @Model.Twitch.StreamerTokenStatus.TextClass">
+                            Token: @Model.Twitch.StreamerTokenStatus.State. @Model.Twitch.StreamerTokenStatus.Details
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Streamer Twitch User Id</label>
@@ -47,6 +50,9 @@
                     <div class="col-md-6">
                         <label class="form-label">Bot Account</label>
                         <input class="form-control" value="@(string.IsNullOrWhiteSpace(Model.Twitch.TwitchBotUserId) ? "Not connected" : "Connected")" readonly />
+                        <div class="small mt-1 @Model.Twitch.BotTokenStatus.TextClass">
+                            Token: @Model.Twitch.BotTokenStatus.State. @Model.Twitch.BotTokenStatus.Details
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Bot Twitch User Id</label>

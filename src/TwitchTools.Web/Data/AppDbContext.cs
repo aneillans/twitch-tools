@@ -44,7 +44,6 @@ public sealed class AppDbContext(
             entity.Property(x => x.TwitchBotUserId).HasMaxLength(64);
             entity.Property(x => x.TwitchBotAccessToken).HasMaxLength(2048).HasConversion(encryptedNullableString);
             entity.Property(x => x.TwitchBotRefreshToken).HasMaxLength(2048).HasConversion(encryptedNullableString);
-            entity.Property(x => x.TwitchModeratorUserId).HasMaxLength(64);
             entity.Property(x => x.BlueSkyIdentifier).HasMaxLength(256);
             entity.Property(x => x.BlueSkyAppPassword).HasMaxLength(512).HasConversion(encryptedNullableString);
             entity.Property(x => x.OverlayToken).HasMaxLength(64);

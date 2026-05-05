@@ -149,6 +149,6 @@ public sealed class DiscordScheduleSyncService(
             clientId,
             streamer.TwitchStreamerAccessToken,
             streamer.TwitchBotUserId ?? options.DefaultBotUserId,
-            streamer.TwitchModeratorUserId ?? options.DefaultModeratorUserId);
+            streamer.TwitchBotUserId ?? options.DefaultBotUserId);
     }
 }

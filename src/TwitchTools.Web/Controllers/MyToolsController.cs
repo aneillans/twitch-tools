@@ -19,6 +19,7 @@ public sealed class MyToolsController(
     AppDbContext dbContext,
     IOptions<TwitchOptions> twitchOptions,
     IOptions<DiscordOptions> discordOptions,
+    ITwitchApiClient twitchApiClient,
     IHttpClientFactory httpClientFactory,
     IDiscordScheduleSyncService discordSyncService,
     IBlueSkyApiClient blueSkyApiClient,
@@ -72,6 +73,8 @@ public sealed class MyToolsController(
                 DisplayName = streamer.DisplayName,
                 TwitchUserId = streamer.TwitchUserId,
                 TwitchBotUserId = streamer.TwitchBotUserId,
+                StreamerTokenStatus = await BuildTokenStatusAsync(streamer.TwitchStreamerAccessToken, streamer.TwitchUserId, cancellationToken),
+                BotTokenStatus = await BuildTokenStatusAsync(streamer.TwitchBotAccessToken, streamer.TwitchBotUserId, cancellationToken),
                 TwitchStreamerAccessToken = streamer.TwitchStreamerAccessToken,
                 TwitchStreamerRefreshToken = streamer.TwitchStreamerRefreshToken,
                 TwitchClientId = streamer.TwitchClientId,
@@ -468,6 +471,56 @@ public sealed class MyToolsController(
         }
 
         return value.Trim();
+    }
+
+    private async Task<TwitchTokenStatusViewModel> BuildTokenStatusAsync(string? accessToken, string? expectedUserId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return TwitchTokenStatusViewModel.Missing();
+        }
+
+        var result = await twitchApiClient.ValidateAccessTokenAsync(accessToken, cancellationToken);
+        if (!result.IsValid)
+        {
+            return new TwitchTokenStatusViewModel
+            {
+                State = "Invalid",
+                Details = string.IsNullOrWhiteSpace(result.ErrorMessage) ? "Token was rejected by Twitch." : result.ErrorMessage,
+                TextClass = "text-danger"
+            };
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedUserId)
+            && !string.IsNullOrWhiteSpace(result.UserId)
+            && !string.Equals(expectedUserId, result.UserId, StringComparison.Ordinal))
+        {
+            return new TwitchTokenStatusViewModel
+            {
+                State = "Mismatch",
+                Details = $"Token belongs to Twitch user {result.Login ?? result.UserId}, expected {expectedUserId}.",
+                TextClass = "text-warning"
+            };
+        }
+
+        if (result.ExpiresInSeconds is <= 3600)
+        {
+            return new TwitchTokenStatusViewModel
+            {
+                State = "Expiring soon",
+                Details = $"Token is valid but expires in about {Math.Max(0, result.ExpiresInSeconds ?? 0) / 60} minutes.",
+                TextClass = "text-warning"
+            };
+        }
+
+        return new TwitchTokenStatusViewModel
+        {
+            State = "Valid",
+            Details = string.IsNullOrWhiteSpace(result.Login)
+                ? "Token validated successfully."
+                : $"Valid for Twitch user {result.Login} ({result.UserId}).",
+            TextClass = "text-success"
+        };
     }
 
     private static string? BuildDiscordInviteUrl(DiscordOptions options)

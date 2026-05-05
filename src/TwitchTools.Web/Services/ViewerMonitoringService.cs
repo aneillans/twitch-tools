@@ -24,7 +24,7 @@ public sealed class ViewerMonitoringService(
                 await UpdateOverlaySnapshotAsync(streamer, overlayAuth, cancellationToken);
             }
 
-            var auth = BuildAuth(streamer, twitchOptions.Value);
+            var auth = await ResolveViewerAuthAsync(streamer, twitchOptions.Value, cancellationToken);
             if (auth is null)
             {
                 logger.LogWarning("Skipping viewer monitoring for {Streamer} because Twitch auth is not configured.", streamer.DisplayName);
@@ -34,12 +34,17 @@ public sealed class ViewerMonitoringService(
             var isLive = await twitchApiClient.IsStreamerLiveAsync(streamer.TwitchUserId, auth, cancellationToken);
             if (!isLive)
             {
+                logger.LogDebug("Skipping viewer sample collection for {Streamer} because the channel is not currently live.", streamer.DisplayName);
                 continue;
             }
 
             var chatterIds = await twitchApiClient.GetCurrentChattersAsync(streamer.TwitchUserId, auth, cancellationToken);
             if (chatterIds.Count == 0)
             {
+                logger.LogInformation(
+                    "Viewer sample collection for {Streamer} returned zero chatters while live. BotUserId={BotUserId}.",
+                    streamer.DisplayName,
+                    auth.BotUserId);
                 continue;
             }
 
@@ -63,6 +68,11 @@ public sealed class ViewerMonitoringService(
                     CapturedUtc = DateTime.UtcNow
                 });
             }
+
+            logger.LogInformation(
+                "Recorded viewer samples for {Streamer}: {ViewerCount} active chatters.",
+                streamer.DisplayName,
+                chatterIds.Count);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -106,29 +116,54 @@ public sealed class ViewerMonitoringService(
         snapshot.UpdatedUtc = DateTime.UtcNow;
     }
 
-    private static TwitchAuthContext? BuildAuth(Streamer streamer, TwitchOptions options)
+    private async Task<TwitchAuthContext?> ResolveViewerAuthAsync(Streamer streamer, TwitchOptions options, CancellationToken cancellationToken)
     {
         var clientId = string.IsNullOrWhiteSpace(streamer.TwitchClientId) ? options.DefaultClientId : streamer.TwitchClientId;
-        var tokenToUse = string.IsNullOrWhiteSpace(streamer.TwitchBotAccessToken)
-            ? streamer.TwitchStreamerAccessToken
-            : streamer.TwitchBotAccessToken;
-        var moderatorUserId = !string.IsNullOrWhiteSpace(streamer.TwitchBotAccessToken)
-            && !string.IsNullOrWhiteSpace(streamer.TwitchBotUserId)
-            ? streamer.TwitchBotUserId
-            : streamer.TwitchUserId;
-
-        if (string.IsNullOrWhiteSpace(clientId)
-            || string.IsNullOrWhiteSpace(tokenToUse)
-            || string.IsNullOrWhiteSpace(moderatorUserId))
+        if (string.IsNullOrWhiteSpace(clientId))
         {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(streamer.TwitchBotAccessToken)
+            && !string.IsNullOrWhiteSpace(streamer.TwitchBotUserId))
+        {
+            var botValidation = await twitchApiClient.ValidateAccessTokenAsync(streamer.TwitchBotAccessToken, cancellationToken);
+            if (botValidation.IsValid)
+            {
+                return new TwitchAuthContext(
+                    clientId,
+                    streamer.TwitchBotAccessToken,
+                    streamer.TwitchBotUserId,
+                    streamer.TwitchBotUserId);
+            }
+
+            logger.LogWarning(
+                "Bot Twitch token is invalid for {Streamer}. Falling back to streamer token. Error: {ErrorMessage}",
+                streamer.DisplayName,
+                botValidation.ErrorMessage);
+        }
+
+        if (string.IsNullOrWhiteSpace(streamer.TwitchStreamerAccessToken)
+            || string.IsNullOrWhiteSpace(streamer.TwitchUserId))
+        {
+            return null;
+        }
+
+        var streamerValidation = await twitchApiClient.ValidateAccessTokenAsync(streamer.TwitchStreamerAccessToken, cancellationToken);
+        if (!streamerValidation.IsValid)
+        {
+            logger.LogWarning(
+                "Streamer Twitch token is invalid for {Streamer}. Error: {ErrorMessage}",
+                streamer.DisplayName,
+                streamerValidation.ErrorMessage);
             return null;
         }
 
         return new TwitchAuthContext(
             clientId,
-            tokenToUse,
-            moderatorUserId,
-            moderatorUserId);
+            streamer.TwitchStreamerAccessToken,
+            streamer.TwitchUserId,
+            streamer.TwitchUserId);
     }
 
     private static TwitchAuthContext? BuildOverlayAuth(Streamer streamer, TwitchOptions options)

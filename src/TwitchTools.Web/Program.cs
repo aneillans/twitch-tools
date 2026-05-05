@@ -124,6 +124,7 @@ builder.Services.AddScoped<IOverlayService, OverlayService>();
 
 builder.Services.AddHostedService<LiveStatusBackgroundService>();
 builder.Services.AddHostedService<TimedChatMessageBackgroundService>();
+builder.Services.AddHostedService<TwitchTokenRefreshBackgroundService>();
 builder.Services.AddHostedService<ViewerMonitoringBackgroundService>();
 
 var app = builder.Build();
