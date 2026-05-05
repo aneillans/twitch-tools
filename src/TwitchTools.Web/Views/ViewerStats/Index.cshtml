@@ -30,7 +30,7 @@ else
             <thead class="table-light">
                 <tr>
                     <th scope="col">#</th>
-                    <th scope="col">Viewer ID</th>
+                    <th scope="col">Viewer</th>
                     <th scope="col">Total Time Watched</th>
                     <th scope="col" class="text-end">Seconds</th>
                 </tr>
@@ -42,7 +42,17 @@ else
                     rank++;
                     <tr>
                         <td class="text-muted">@rank</td>
-                        <td class="font-monospace">@row.TwitchViewerId</td>
+                        <td>
+                            @if (row.IsDeletedUser)
+                            {
+                                <span class="text-muted">Deleted user</span>
+                            }
+                            else
+                            {
+                                <span>@(row.TwitchUserName ?? row.TwitchViewerId)</span>
+                            }
+                            <div class="small text-muted font-monospace">@row.TwitchViewerId</div>
+                        </td>
                         <td>
                             @if (row.TotalTime.TotalHours >= 1)
                             {
