@@ -142,6 +142,27 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseExceptionless();
+
+var exceptionlessClient = app.Services.GetRequiredService<ExceptionlessClient>();
+var exceptionlessConfig = exceptionlessClient.Configuration;
+var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+
+startupLogger.LogInformation("Exceptionless ServerUrl: {ServerUrl}", exceptionlessConfig.ServerUrl);
+startupLogger.LogInformation("Exceptionless ApiKey configured: {HasKey}", !string.IsNullOrWhiteSpace(exceptionlessConfig.ApiKey));
+startupLogger.LogInformation("Exceptionless Enabled: {Enabled}", exceptionlessConfig.IsValid);
+var storageImpl = exceptionlessConfig.Resolver.Resolve(typeof(Exceptionless.Storage.IObjectStorage));
+startupLogger.LogInformation("Exceptionless Storage implementation: {StorageType}", storageImpl?.GetType().FullName ?? "<unknown>");
+
+var localStoragePath = Path.Combine(Path.GetTempPath(), "exceptionless");
+if (Directory.Exists(localStoragePath))
+{
+    startupLogger.LogInformation("Exceptionless local storage path exists: {Path}", localStoragePath);
+}
+else
+{
+    startupLogger.LogInformation("Exceptionless local storage path (default): {Path}", localStoragePath);
+}
+
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseRouting();
