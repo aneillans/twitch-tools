@@ -135,7 +135,10 @@ public sealed class BlueSkyApiClient(
 
     private async Task<CreateSessionResponse?> CreateSessionAsync(BlueSkyCredentials credentials, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(credentials.Identifier) || string.IsNullOrWhiteSpace(credentials.AppPassword))
+        var normalizedIdentifier = NormalizeIdentifier(credentials.Identifier);
+        var normalizedAppPassword = NormalizeAppPassword(credentials.AppPassword);
+
+        if (string.IsNullOrWhiteSpace(normalizedIdentifier) || string.IsNullOrWhiteSpace(normalizedAppPassword))
         {
             logger.LogWarning("Skipping BlueSky call because Identifier or AppPassword is missing.");
             return null;
@@ -145,7 +148,7 @@ public sealed class BlueSkyApiClient(
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "xrpc/com.atproto.server.createSession");
             request.Content = new StringContent(
-                JsonSerializer.Serialize(new { identifier = credentials.Identifier, password = credentials.AppPassword }),
+                JsonSerializer.Serialize(new { identifier = normalizedIdentifier, password = normalizedAppPassword }),
                 Encoding.UTF8,
                 "application/json");
 
@@ -155,7 +158,7 @@ public sealed class BlueSkyApiClient(
                 var errorBody = await ReadResponseBodyForLogsAsync(response, cancellationToken);
                 logger.LogWarning(
                     "BlueSky session creation failed for {Identifier} with {StatusCode}. Response: {ResponseBody}",
-                    MaskIdentifier(credentials.Identifier),
+                    MaskIdentifier(normalizedIdentifier),
                     response.StatusCode,
                     errorBody);
                 return null;
@@ -166,7 +169,7 @@ public sealed class BlueSkyApiClient(
 
             if (session is null || string.IsNullOrWhiteSpace(session.Did) || string.IsNullOrWhiteSpace(session.AccessJwt))
             {
-                logger.LogWarning("BlueSky session payload was incomplete for {Identifier}.", MaskIdentifier(credentials.Identifier));
+                logger.LogWarning("BlueSky session payload was incomplete for {Identifier}.", MaskIdentifier(normalizedIdentifier));
                 return null;
             }
 
@@ -174,7 +177,7 @@ public sealed class BlueSkyApiClient(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "BlueSky session creation threw for {Identifier}.", MaskIdentifier(credentials.Identifier));
+            logger.LogError(ex, "BlueSky session creation threw for {Identifier}.", MaskIdentifier(normalizedIdentifier));
             ExceptionlessClient.Default.SubmitException(ex);
             return null;
         }
@@ -228,6 +231,47 @@ public sealed class BlueSkyApiClient(
         return raw.Length <= MaxLoggedBodyLength
             ? raw
             : raw[..MaxLoggedBodyLength] + "...";
+    }
+
+    private static string NormalizeIdentifier(string? identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return string.Empty;
+        }
+
+        var value = identifier.Trim();
+
+        if (value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        {
+            if (Uri.TryCreate(value, UriKind.Absolute, out var uri)
+                && uri.Host.Equals("bsky.app", StringComparison.OrdinalIgnoreCase))
+            {
+                var segments = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+                if (segments.Length >= 2 && segments[0].Equals("profile", StringComparison.OrdinalIgnoreCase))
+                {
+                    value = segments[1];
+                }
+            }
+        }
+
+        if (value.StartsWith('@'))
+        {
+            value = value[1..];
+        }
+
+        return value.Trim();
+    }
+
+    private static string NormalizeAppPassword(string? appPassword)
+    {
+        if (string.IsNullOrWhiteSpace(appPassword))
+        {
+            return string.Empty;
+        }
+
+        return string.Concat(appPassword.Where(c => !char.IsWhiteSpace(c)));
     }
 
     private static HttpRequestMessage CreateAuthenticatedRequest(HttpMethod method, string relativePath, string jwt, object payload)
