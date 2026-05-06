@@ -29,5 +29,10 @@
 </head>
 <body>
 <div class="value">@(Model.DisplayValue ?? string.Empty)</div>
+<script>
+    setInterval(function () {
+        window.location.reload();
+    }, 15000);
+</script>
 </body>
 </html>
