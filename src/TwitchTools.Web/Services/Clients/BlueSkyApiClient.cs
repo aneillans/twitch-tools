@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Exceptionless;
 using Microsoft.Extensions.Options;
 using TwitchTools.Web.Options;
@@ -14,6 +15,7 @@ public sealed class BlueSkyApiClient(
 {
     private readonly BlueSkyOptions _options = options.Value;
     private const int MaxLoggedBodyLength = 512;
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public async Task<string?> PublishLiveStatePostAsync(string streamerName, bool isLive, BlueSkyCredentials credentials, CancellationToken cancellationToken)
     {
@@ -54,7 +56,7 @@ public sealed class BlueSkyApiClient(
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            var payload = await JsonSerializer.DeserializeAsync<CreateRecordResponse>(stream, cancellationToken: cancellationToken);
+            var payload = await JsonSerializer.DeserializeAsync<CreateRecordResponse>(stream, JsonOptions, cancellationToken);
             return payload?.Uri;
         }
         catch (Exception ex)
@@ -91,7 +93,7 @@ public sealed class BlueSkyApiClient(
             }
 
             await using var profileStream = await profileResponse.Content.ReadAsStreamAsync(cancellationToken);
-            var current = await JsonSerializer.DeserializeAsync<ProfileResponse>(profileStream, cancellationToken: cancellationToken);
+            var current = await JsonSerializer.DeserializeAsync<ProfileResponse>(profileStream, JsonOptions, cancellationToken);
             var description = current?.Description ?? string.Empty;
             var prefix = _options.LiveProfilePrefix;
 
@@ -165,7 +167,7 @@ public sealed class BlueSkyApiClient(
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            var session = await JsonSerializer.DeserializeAsync<CreateSessionResponse>(stream, cancellationToken: cancellationToken);
+            var session = await JsonSerializer.DeserializeAsync<CreateSessionResponse>(stream, JsonOptions, cancellationToken);
 
             if (session is null || string.IsNullOrWhiteSpace(session.Did) || string.IsNullOrWhiteSpace(session.AccessJwt))
             {
@@ -284,18 +286,25 @@ public sealed class BlueSkyApiClient(
 
     private sealed class CreateSessionResponse
     {
+        [JsonPropertyName("did")]
         public string Did { get; init; } = string.Empty;
+
+        [JsonPropertyName("accessJwt")]
         public string AccessJwt { get; init; } = string.Empty;
     }
 
     private sealed class CreateRecordResponse
     {
+        [JsonPropertyName("uri")]
         public string? Uri { get; init; }
     }
 
     private sealed class ProfileResponse
     {
+        [JsonPropertyName("displayName")]
         public string? DisplayName { get; init; }
+
+        [JsonPropertyName("description")]
         public string? Description { get; init; }
     }
 }
