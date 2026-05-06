@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Exceptionless;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -313,11 +314,21 @@ public sealed class MyToolsController(
             return RedirectToAction(nameof(Index));
         }
 
-        var credentials = new BlueSkyCredentials(streamer.BlueSkyIdentifier, streamer.BlueSkyAppPassword);
-        var ok = await blueSkyApiClient.TestConnectionAsync(credentials, cancellationToken);
-        TempData["StatusMessage"] = ok
-            ? "BlueSky connection successful."
-            : "BlueSky connection failed. Check your identifier and app password.";
+        try
+        {
+            var credentials = new BlueSkyCredentials(streamer.BlueSkyIdentifier, streamer.BlueSkyAppPassword);
+            var ok = await blueSkyApiClient.TestConnectionAsync(credentials, cancellationToken);
+            TempData["StatusMessage"] = ok
+                ? "BlueSky connection successful."
+                : "BlueSky connection failed. Check your identifier and app password.";
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "BlueSky connection test failed for streamer {StreamerId}.", streamer.Id);
+            ExceptionlessClient.Default.SubmitException(ex);
+            TempData["StatusMessage"] = "BlueSky connection failed unexpectedly. The error has been captured for review.";
+        }
+
         return RedirectToAction(nameof(Index));
     }
 
