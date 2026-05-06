@@ -147,20 +147,27 @@ var exceptionlessClient = app.Services.GetRequiredService<ExceptionlessClient>()
 var exceptionlessConfig = exceptionlessClient.Configuration;
 var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
 
+var exceptionlessStoragePath =
+    Environment.GetEnvironmentVariable("EXCEPTIONLESS_STORAGE_PATH")
+    ?? Path.Combine(Path.GetTempPath(), "exceptionless");
+
+Directory.CreateDirectory(exceptionlessStoragePath);
+exceptionlessConfig.UseFolderStorage(exceptionlessStoragePath);
+exceptionlessConfig.UseTraceLogger(Exceptionless.Logging.LogLevel.Trace);
+exceptionlessConfig.SetDefaultMinLogLevel(Exceptionless.Logging.LogLevel.Trace);
+
 startupLogger.LogInformation("Exceptionless ServerUrl: {ServerUrl}", exceptionlessConfig.ServerUrl);
 startupLogger.LogInformation("Exceptionless ApiKey configured: {HasKey}", !string.IsNullOrWhiteSpace(exceptionlessConfig.ApiKey));
 startupLogger.LogInformation("Exceptionless Enabled: {Enabled}", exceptionlessConfig.IsValid);
+startupLogger.LogInformation("Exceptionless QueueMaxAttempts: {QueueMaxAttempts}", exceptionlessConfig.QueueMaxAttempts);
+startupLogger.LogInformation("Exceptionless QueueMaxAge: {QueueMaxAge}", exceptionlessConfig.QueueMaxAge);
 var storageImpl = exceptionlessConfig.Resolver.Resolve(typeof(Exceptionless.Storage.IObjectStorage));
 startupLogger.LogInformation("Exceptionless Storage implementation: {StorageType}", storageImpl?.GetType().FullName ?? "<unknown>");
+startupLogger.LogInformation("Exceptionless local storage path: {Path}", exceptionlessStoragePath);
 
-var localStoragePath = Path.Combine(Path.GetTempPath(), "exceptionless");
-if (Directory.Exists(localStoragePath))
+if (!Directory.Exists(exceptionlessStoragePath))
 {
-    startupLogger.LogInformation("Exceptionless local storage path exists: {Path}", localStoragePath);
-}
-else
-{
-    startupLogger.LogInformation("Exceptionless local storage path (default): {Path}", localStoragePath);
+    startupLogger.LogWarning("Exceptionless local storage directory does not exist after initialization: {Path}", exceptionlessStoragePath);
 }
 
 app.UseForwardedHeaders();
