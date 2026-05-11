@@ -4,6 +4,7 @@ public interface ITwitchApiClient
 {
     Task<TwitchTokenValidationResult> ValidateAccessTokenAsync(string accessToken, CancellationToken cancellationToken);
     Task<TwitchTokenRefreshResult> RefreshAccessTokenAsync(string refreshToken, string clientId, string clientSecret, CancellationToken cancellationToken);
+    Task<TwitchStreamStatus> GetStreamStatusAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<bool> IsStreamerLiveAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<string>> GetCurrentChattersAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task SendChatMessageAsync(string broadcasterUserId, string message, TwitchAuthContext authContext, CancellationToken cancellationToken);
@@ -29,6 +30,11 @@ public sealed record TwitchScheduleSegment(
     string BroadcasterLogin,
     DateTimeOffset StartTimeUtc,
     DateTimeOffset EndTimeUtc);
+
+public sealed record TwitchStreamStatus(
+    bool IsLive,
+    string? StreamTitle,
+    string? GameName);
 
 public sealed record TwitchFollowerEvent(
     string UserId,

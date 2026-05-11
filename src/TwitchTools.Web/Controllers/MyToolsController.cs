@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Exceptionless;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,8 @@ public sealed class MyToolsController(
 {
     private const string TwitchOAuthStateCookie = "twitch_oauth_state";
     private const string TwitchOAuthModeCookie = "twitch_oauth_mode";
+    private const string DefaultBlueSkyStartedTemplate = "{streamer} is now live on Twitch.";
+    private const string DefaultBlueSkyStoppedTemplate = "{streamer} has ended the stream.";
     private static readonly JsonSerializerOptions TwitchJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -35,8 +38,6 @@ public sealed class MyToolsController(
     [HttpGet("/my-tools")]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
-        ViewData["DiscordInviteUrl"] = BuildDiscordInviteUrl(discordOptions.Value);
-
         var ownerSubject = GetOwnerSubject();
         if (ownerSubject is null)
         {
@@ -52,18 +53,6 @@ public sealed class MyToolsController(
             ViewData["StatusMessage"] = TempData["StatusMessage"] as string;
             return View(new MyToolsViewModel());
         }
-
-        var discordSyncs = await dbContext.DiscordGuildSyncs
-            .AsNoTracking()
-            .Where(x => x.StreamerId == streamer.Id)
-            .OrderBy(x => x.Id)
-            .Select(x => new DiscordSyncItem
-            {
-                Id = x.Id,
-                GuildId = x.GuildId,
-                LastSyncedUtc = x.LastSyncedUtc
-            })
-            .ToListAsync(cancellationToken);
 
         var model = new MyToolsViewModel
         {
@@ -85,9 +74,61 @@ public sealed class MyToolsController(
             {
                 BlueSkyIdentifier = streamer.BlueSkyIdentifier,
                 BlueSkyAppPassword = streamer.BlueSkyAppPassword
-            },
-            DiscordSyncs = discordSyncs
+            }
         };
+
+        ViewData["StatusMessage"] = TempData["StatusMessage"] as string;
+        return View(model);
+    }
+
+    [HttpGet("/my-tools/live-automation")]
+    public async Task<IActionResult> LiveAutomation(CancellationToken cancellationToken)
+    {
+        ViewData["DiscordInviteUrl"] = BuildDiscordInviteUrl(discordOptions.Value);
+
+        var ownerSubject = GetOwnerSubject();
+        if (ownerSubject is null)
+        {
+            return Challenge();
+        }
+
+        var streamer = await dbContext.Streamers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.OwnerSubject == ownerSubject, cancellationToken);
+
+        var model = new LiveAutomationViewModel();
+        if (streamer is not null)
+        {
+            var discordSyncs = await dbContext.DiscordGuildSyncs
+                .AsNoTracking()
+                .Where(x => x.StreamerId == streamer.Id)
+                .OrderBy(x => x.Id)
+                .Select(x => new DiscordSyncItem
+                {
+                    Id = x.Id,
+                    GuildId = x.GuildId,
+                    LastSyncedUtc = x.LastSyncedUtc
+                })
+                .ToListAsync(cancellationToken);
+
+            model = new LiveAutomationViewModel
+            {
+                DiscordSyncs = discordSyncs,
+                IsBlueSkyConfigured = !string.IsNullOrWhiteSpace(streamer.BlueSkyIdentifier)
+                    && !string.IsNullOrWhiteSpace(streamer.BlueSkyAppPassword),
+                BlueSkyTemplates = new BlueSkyLivePostTemplatesInput
+                {
+                    PostOnStreamStart = streamer.BlueSkyPostOnStreamStart,
+                    PostOnStreamStop = streamer.BlueSkyPostOnStreamStop,
+                    StreamStartedTemplate = string.IsNullOrWhiteSpace(streamer.BlueSkyStreamStartedTemplate)
+                        ? DefaultBlueSkyStartedTemplate
+                        : streamer.BlueSkyStreamStartedTemplate,
+                    StreamStoppedTemplate = string.IsNullOrWhiteSpace(streamer.BlueSkyStreamStoppedTemplate)
+                        ? DefaultBlueSkyStoppedTemplate
+                        : streamer.BlueSkyStreamStoppedTemplate
+                }
+            };
+        }
 
         ViewData["StatusMessage"] = TempData["StatusMessage"] as string;
         return View(model);
@@ -266,6 +307,7 @@ public sealed class MyToolsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Twitch OAuth callback failed.");
+            ExceptionlessClient.Default.SubmitException(ex);
             TempData["StatusMessage"] = "Twitch connection failed unexpectedly.";
             return RedirectToAction(nameof(Index));
         }
@@ -313,11 +355,21 @@ public sealed class MyToolsController(
             return RedirectToAction(nameof(Index));
         }
 
-        var credentials = new BlueSkyCredentials(streamer.BlueSkyIdentifier, streamer.BlueSkyAppPassword);
-        var ok = await blueSkyApiClient.TestConnectionAsync(credentials, cancellationToken);
-        TempData["StatusMessage"] = ok
-            ? "BlueSky connection successful."
-            : "BlueSky connection failed. Check your identifier and app password.";
+        try
+        {
+            var credentials = new BlueSkyCredentials(streamer.BlueSkyIdentifier, streamer.BlueSkyAppPassword);
+            var ok = await blueSkyApiClient.TestConnectionAsync(credentials, cancellationToken);
+            TempData["StatusMessage"] = ok
+                ? "BlueSky connection successful."
+                : "BlueSky connection failed. Check your identifier and app password.";
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "BlueSky connection test failed for streamer {StreamerId}.", streamer.Id);
+            ExceptionlessClient.Default.SubmitException(ex);
+            TempData["StatusMessage"] = "BlueSky connection failed unexpectedly. The error has been captured for review.";
+        }
+
         return RedirectToAction(nameof(Index));
     }
 
@@ -340,6 +392,34 @@ public sealed class MyToolsController(
         return RedirectToAction(nameof(Index));
     }
 
+    [HttpPost("/my-tools/bluesky/templates")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveBlueSkyTemplates([Bind(Prefix = nameof(LiveAutomationViewModel.BlueSkyTemplates))] BlueSkyLivePostTemplatesInput input, CancellationToken cancellationToken)
+    {
+        var streamer = await GetOwnedStreamerAsync(cancellationToken);
+        if (streamer is null)
+        {
+            return RedirectToAction(nameof(LiveAutomation));
+        }
+
+        var isBlueSkyConfigured = !string.IsNullOrWhiteSpace(streamer.BlueSkyIdentifier)
+            && !string.IsNullOrWhiteSpace(streamer.BlueSkyAppPassword);
+        if (!isBlueSkyConfigured)
+        {
+            TempData["StatusMessage"] = "Configure BlueSky credentials on My Tools before editing stream announcement text.";
+            return RedirectToAction(nameof(LiveAutomation));
+        }
+
+        streamer.BlueSkyStreamStartedTemplate = TrimToNull(input.StreamStartedTemplate);
+        streamer.BlueSkyStreamStoppedTemplate = TrimToNull(input.StreamStoppedTemplate);
+        streamer.BlueSkyPostOnStreamStart = input.PostOnStreamStart;
+        streamer.BlueSkyPostOnStreamStop = input.PostOnStreamStop;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        TempData["StatusMessage"] = "BlueSky stream announcement templates saved.";
+        return RedirectToAction(nameof(LiveAutomation));
+    }
+
     [HttpPost("/my-tools/discord-syncs")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddDiscordSync(AddDiscordSyncInput input, CancellationToken cancellationToken)
@@ -349,13 +429,13 @@ public sealed class MyToolsController(
         if (string.IsNullOrWhiteSpace(guildId) || !guildId.All(char.IsDigit))
         {
             TempData["StatusMessage"] = "Please enter a valid Discord Guild (Server) ID.";
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction(nameof(LiveAutomation));
         }
 
         var streamer = await GetOwnedStreamerAsync(cancellationToken);
         if (streamer is null)
         {
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction(nameof(LiveAutomation));
         }
 
         dbContext.DiscordGuildSyncs.Add(new DiscordGuildSync
@@ -367,7 +447,7 @@ public sealed class MyToolsController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         TempData["StatusMessage"] = "Discord server added. Scheduled events will sync on the next cycle.";
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(LiveAutomation));
     }
 
     [HttpPost("/my-tools/discord-syncs/{id:long}/sync")]
@@ -380,7 +460,7 @@ public sealed class MyToolsController(
 
         if (sync is null || !IsOwner(sync.Streamer.OwnerSubject))
         {
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction(nameof(LiveAutomation));
         }
 
         try
@@ -391,10 +471,11 @@ public sealed class MyToolsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Manual Discord sync failed for guild {GuildId}.", sync.GuildId);
+            ExceptionlessClient.Default.SubmitException(ex);
             TempData["StatusMessage"] = $"Discord sync failed for server {sync.GuildId}. Check logs for details.";
         }
 
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(LiveAutomation));
     }
 
     [HttpPost("/my-tools/discord-syncs/{id:long}/delete")]
@@ -407,12 +488,13 @@ public sealed class MyToolsController(
 
         if (sync is null || !IsOwner(sync.Streamer.OwnerSubject))
         {
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction(nameof(LiveAutomation));
         }
 
         dbContext.DiscordGuildSyncs.Remove(sync);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToAction(nameof(Index));
+        TempData["StatusMessage"] = $"Discord server {sync.GuildId} removed.";
+        return RedirectToAction(nameof(LiveAutomation));
     }
 
     private async Task<Streamer?> GetOwnedStreamerAsync(CancellationToken cancellationToken)

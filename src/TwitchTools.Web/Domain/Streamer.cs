@@ -14,6 +14,10 @@ public sealed class Streamer
     public string? TwitchBotRefreshToken { get; set; }
     public string? BlueSkyIdentifier { get; set; }
     public string? BlueSkyAppPassword { get; set; }
+    public bool BlueSkyPostOnStreamStart { get; set; } = true;
+    public bool BlueSkyPostOnStreamStop { get; set; } = true;
+    public string? BlueSkyStreamStartedTemplate { get; set; }
+    public string? BlueSkyStreamStoppedTemplate { get; set; }
     public string DisplayName { get; set; } = string.Empty;
     public string OverlayToken { get; set; } = string.Empty;
     public string FollowerOverlayToken { get; set; } = string.Empty;

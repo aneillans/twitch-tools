@@ -1,3 +1,4 @@
+using Exceptionless;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TwitchTools.Web.Data;
@@ -54,7 +55,8 @@ public sealed class LiveStatusBackgroundService(
                         continue;
                     }
 
-                    var isLive = await twitchApiClient.IsStreamerLiveAsync(streamer.TwitchUserId, auth, stoppingToken);
+                    var streamStatus = await twitchApiClient.GetStreamStatusAsync(streamer.TwitchUserId, auth, stoppingToken);
+                    var isLive = streamStatus.IsLive;
 
                     var previous = await dbContext.LiveNotificationEvents
                         .AsNoTracking()
@@ -77,6 +79,7 @@ public sealed class LiveStatusBackgroundService(
                         {
                             RegisterDiscordRefreshFailure(streamer.Id, now);
                             logger.LogError(ex, "Discord schedule sync failed for {Streamer}.", streamer.DisplayName);
+                            ExceptionlessClient.Default.SubmitException(ex);
                         }
                     }
 
@@ -85,7 +88,7 @@ public sealed class LiveStatusBackgroundService(
                         continue;
                     }
 
-                    var postUri = await blueSkyService.PublishLiveStateAsync(streamer, isLive, stoppingToken);
+                    var postUri = await blueSkyService.PublishLiveStateAsync(streamer, isLive, streamStatus, stoppingToken);
 
                     dbContext.LiveNotificationEvents.Add(new LiveNotificationEvent
                     {
@@ -101,6 +104,7 @@ public sealed class LiveStatusBackgroundService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Live status monitoring cycle failed.");
+                ExceptionlessClient.Default.SubmitException(ex);
             }
 
             await Task.Delay(Interval, stoppingToken);

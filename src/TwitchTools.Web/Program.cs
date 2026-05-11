@@ -142,6 +142,35 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseExceptionless();
+
+var exceptionlessClient = app.Services.GetRequiredService<ExceptionlessClient>();
+var exceptionlessConfig = exceptionlessClient.Configuration;
+var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+ConfigureGlobalExceptionForwarding(exceptionlessClient, startupLogger);
+
+var exceptionlessStoragePath =
+    Environment.GetEnvironmentVariable("EXCEPTIONLESS_STORAGE_PATH")
+    ?? Path.Combine(Path.GetTempPath(), "exceptionless");
+
+Directory.CreateDirectory(exceptionlessStoragePath);
+exceptionlessConfig.UseFolderStorage(exceptionlessStoragePath);
+exceptionlessConfig.UseTraceLogger(Exceptionless.Logging.LogLevel.Trace);
+exceptionlessConfig.SetDefaultMinLogLevel(Exceptionless.Logging.LogLevel.Trace);
+
+startupLogger.LogInformation("Exceptionless ServerUrl: {ServerUrl}", exceptionlessConfig.ServerUrl);
+startupLogger.LogInformation("Exceptionless ApiKey configured: {HasKey}", !string.IsNullOrWhiteSpace(exceptionlessConfig.ApiKey));
+startupLogger.LogInformation("Exceptionless Enabled: {Enabled}", exceptionlessConfig.IsValid);
+startupLogger.LogInformation("Exceptionless QueueMaxAttempts: {QueueMaxAttempts}", exceptionlessConfig.QueueMaxAttempts);
+startupLogger.LogInformation("Exceptionless QueueMaxAge: {QueueMaxAge}", exceptionlessConfig.QueueMaxAge);
+var storageImpl = exceptionlessConfig.Resolver.Resolve(typeof(Exceptionless.Storage.IObjectStorage));
+startupLogger.LogInformation("Exceptionless Storage implementation: {StorageType}", storageImpl?.GetType().FullName ?? "<unknown>");
+startupLogger.LogInformation("Exceptionless local storage path: {Path}", exceptionlessStoragePath);
+
+if (!Directory.Exists(exceptionlessStoragePath))
+{
+    startupLogger.LogWarning("Exceptionless local storage directory does not exist after initialization: {Path}", exceptionlessStoragePath);
+}
+
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseRouting();
@@ -267,9 +296,9 @@ static void AddRolesFromJwt(ClaimsIdentity identity, string? jwt, string clientI
             }
         }
     }
-    catch
+    catch (Exception ex)
     {
-        // Ignore malformed tokens here; normal OIDC validation still applies.
+        ExceptionlessClient.Default.SubmitException(ex);
     }
 }
 
@@ -279,4 +308,26 @@ static void AddRoleClaim(ClaimsIdentity identity, string role)
     {
         identity.AddClaim(new Claim("roles", role));
     }
+}
+
+static void ConfigureGlobalExceptionForwarding(ExceptionlessClient exceptionlessClient, ILogger startupLogger)
+{
+    AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+    {
+        if (args.ExceptionObject is Exception ex)
+        {
+            exceptionlessClient.SubmitException(ex);
+            startupLogger.LogCritical(ex, "Unhandled AppDomain exception captured. IsTerminating={IsTerminating}", args.IsTerminating);
+            return;
+        }
+
+        startupLogger.LogCritical("Unhandled AppDomain exception object captured, but it was not an Exception instance. IsTerminating={IsTerminating}", args.IsTerminating);
+    };
+
+    TaskScheduler.UnobservedTaskException += (_, args) =>
+    {
+        exceptionlessClient.SubmitException(args.Exception);
+        startupLogger.LogError(args.Exception, "Unobserved task exception captured.");
+        args.SetObserved();
+    };
 }

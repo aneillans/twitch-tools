@@ -108,18 +108,24 @@
     <div class="card-body">
         <div class="alert alert-secondary">
             <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
-                <span>Create an App Password in BlueSky and enter it below.</span>
+                <span>Create an App Password in BlueSky and enter it below. Use your handle or DID for the identifier.</span>
             </div>
         </div>
         <form asp-controller="MyTools" asp-action="SaveBlueSky" method="post">  
             <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label">BlueSky Identifier</label>
-                    <input class="form-control" asp-for="BlueSky.BlueSkyIdentifier" />
+                    <input class="form-control" asp-for="BlueSky.BlueSkyIdentifier" id="BlueSkyIdentifier" autocomplete="username" spellcheck="false" />
+                    <div id="BlueSkyIdentifierFeedback" class="form-text">
+                        Recommended format: <code>your.handle.bsky.social</code> or <code>did:plc:...</code>.
+                    </div>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">BlueSky App Password</label>
-                    <input class="form-control" asp-for="BlueSky.BlueSkyAppPassword" type="password" autocomplete="new-password" spellcheck="false" />
+                    <input class="form-control" asp-for="BlueSky.BlueSkyAppPassword" id="BlueSkyAppPassword" type="password" autocomplete="new-password" spellcheck="false" />
+                    <div id="BlueSkyAppPasswordFeedback" class="form-text">
+                        App passwords are usually 4 groups separated by dashes, for example <code>xxxx-xxxx-xxxx-xxxx</code>.
+                    </div>
                 </div>
             </div>
             <div class="mt-3">
@@ -134,6 +140,102 @@
     </div>
 </div>
 
+<script>
+    (function () {
+        const identifierInput = document.getElementById("BlueSkyIdentifier");
+        const passwordInput = document.getElementById("BlueSkyAppPassword");
+        const identifierFeedback = document.getElementById("BlueSkyIdentifierFeedback");
+        const passwordFeedback = document.getElementById("BlueSkyAppPasswordFeedback");
+
+        if (!identifierInput || !passwordInput || !identifierFeedback || !passwordFeedback) {
+            return;
+        }
+
+        const setState = (input, feedback, type, message) => {
+            input.classList.remove("is-invalid", "is-warning");
+            feedback.classList.remove("text-danger", "text-warning", "text-muted");
+
+            if (type === "error") {
+                input.classList.add("is-invalid");
+                feedback.classList.add("text-danger");
+            } else if (type === "warning") {
+                input.classList.add("is-warning");
+                feedback.classList.add("text-warning");
+            } else {
+                feedback.classList.add("text-muted");
+            }
+
+            feedback.textContent = message;
+        };
+
+        const validateIdentifier = () => {
+            const value = identifierInput.value || "";
+            const trimmed = value.trim();
+
+            if (!trimmed) {
+                setState(identifierInput, identifierFeedback, "ok", "Recommended format: your.handle.bsky.social or did:plc:...");
+                return;
+            }
+
+            if (/\s/.test(value)) {
+                setState(identifierInput, identifierFeedback, "error", "Identifier contains spaces. Remove all spaces.");
+                return;
+            }
+
+            if (trimmed.startsWith("\u0040")) {
+                setState(identifierInput, identifierFeedback, "warning", "Identifier starts with \u0040. It will be accepted, but entering it without \u0040 is recommended.");
+                return;
+            }
+
+            if (/^https?:\/\//i.test(trimmed)) {
+                setState(identifierInput, identifierFeedback, "warning", "Looks like a URL. A handle or DID is recommended.");
+                return;
+            }
+
+            setState(identifierInput, identifierFeedback, "ok", "Identifier format looks good.");
+        };
+
+        const validatePassword = () => {
+            const value = passwordInput.value || "";
+
+            if (!value) {
+                setState(passwordInput, passwordFeedback, "ok", "App passwords are usually 4 groups separated by dashes, for example xxxx-xxxx-xxxx-xxxx.");
+                return;
+            }
+
+            if (/\s/.test(value)) {
+                setState(passwordInput, passwordFeedback, "error", "App password contains spaces. Copy the exact value and avoid extra whitespace.");
+                return;
+            }
+
+            if (!/^[A-Za-z0-9\-]+$/.test(value)) {
+                setState(passwordInput, passwordFeedback, "warning", "Unexpected characters found. BlueSky app passwords usually use letters, numbers, and dashes only.");
+                return;
+            }
+
+            if (value.length < 15) {
+                setState(passwordInput, passwordFeedback, "warning", "This looks shorter than a typical BlueSky app password.");
+                return;
+            }
+
+            setState(passwordInput, passwordFeedback, "ok", "App password format looks reasonable.");
+        };
+
+        identifierInput.addEventListener("input", validateIdentifier);
+        passwordInput.addEventListener("input", validatePassword);
+
+        validateIdentifier();
+        validatePassword();
+    })();
+</script>
+
+<style>
+    .is-warning {
+        border-color: var(--bs-warning);
+        box-shadow: 0 0 0 .25rem rgba(var(--bs-warning-rgb), .25);
+    }
+</style>
+
 <div class="row g-4">
     <div class="col-lg-6">
         <div class="card h-100">
@@ -147,67 +249,10 @@
 
     <div class="col-lg-6">
         <div class="card h-100">
-            <div class="card-header">Discord Schedule Sync Servers</div>
+            <div class="card-header">Live Automation and Notifications</div>
             <div class="card-body">
-                @if (ViewData["DiscordInviteUrl"] is string discordInviteUrl && !string.IsNullOrWhiteSpace(discordInviteUrl))
-                {
-                    <div class="alert alert-secondary">
-                        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
-                            <span>First, invite the bot to your Discord server. The bot needs <strong>Manage Events</strong> permission.</span>
-                            <a class="btn btn-sm btn-primary" href="@discordInviteUrl" target="_blank" rel="noopener noreferrer">Invite Discord Bot</a>
-                        </div>
-                    </div>
-                }
-
-                <p class="text-muted small">
-                    Right-click your server in Discord and select <em>Copy Server ID</em> (requires Developer Mode enabled in Discord settings).
-                </p>
-
-                <form asp-controller="MyTools" asp-action="AddDiscordSync" method="post" class="row g-2 mb-3">
-                    @Html.AntiForgeryToken()
-                    <div class="col-9">
-                        <input class="form-control" name="GuildId" placeholder="Discord Server (Guild) ID" required />
-                    </div>
-                    <div class="col-3 d-grid">
-                        <button class="btn btn-outline-primary" type="submit">Add</button>
-                    </div>
-                </form>
-
-                @if (!Model.DiscordSyncs.Any())
-                {
-                    <p class="text-muted">No Discord servers added yet.</p>
-                }
-                else
-                {
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Server (Guild) ID</th>
-                                <th>Last Synced</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @foreach (var sync in Model.DiscordSyncs)
-                        {
-                            <tr>
-                                <td class="font-monospace">@sync.GuildId</td>
-                                <td class="text-muted small">
-                                    @(sync.LastSyncedUtc == DateTime.UnixEpoch ? "Never" : sync.LastSyncedUtc.ToString("yyyy-MM-dd HH:mm") + " UTC")
-                                </td>
-                                <td class="text-end">
-                                    <form asp-controller="MyTools" asp-action="SyncDiscordNow" asp-route-id="@sync.Id" method="post" class="d-inline me-1">
-                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Sync now</button>
-                                    </form>
-                                    <form asp-controller="MyTools" asp-action="DeleteDiscordSync" asp-route-id="@sync.Id" method="post" class="d-inline">
-                                        <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
-                                    </form>
-                                </td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
-                }
+                <p class="text-muted">Manage Discord schedule sync servers and BlueSky start/stop stream announcement text from one dedicated page.</p>
+                <a class="btn btn-primary" asp-controller="MyTools" asp-action="LiveAutomation">Open Live Automation</a>
             </div>
         </div>
     </div>
