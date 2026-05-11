@@ -95,10 +95,18 @@
                 <form asp-controller="MyTools" asp-action="SaveBlueSkyTemplates" method="post">
                     @Html.AntiForgeryToken()
                     <fieldset disabled="@(!Model.IsBlueSkyConfigured ? "disabled" : null)">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" asp-for="BlueSkyTemplates.PostOnStreamStart" />
+                            <label class="form-check-label" asp-for="BlueSkyTemplates.PostOnStreamStart">Post to BlueSky when stream starts</label>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label" asp-for="BlueSkyTemplates.StreamStartedTemplate">When stream starts</label>
                             <textarea class="form-control" asp-for="BlueSkyTemplates.StreamStartedTemplate" rows="4" maxlength="500"></textarea>
-                            <div class="form-text">Use <code>{streamer}</code> to insert the streamer display name.</div>
+                            <div class="form-text">Use <code>{streamer}</code>, <code>{title}</code>, and <code>{game}</code> to insert Twitch stream values.</div>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" asp-for="BlueSkyTemplates.PostOnStreamStop" />
+                            <label class="form-check-label" asp-for="BlueSkyTemplates.PostOnStreamStop">Post to BlueSky when stream stops</label>
                         </div>
                         <div class="mb-3">
                             <label class="form-label" asp-for="BlueSkyTemplates.StreamStoppedTemplate">When stream stops</label>

@@ -77,6 +77,12 @@ public sealed class TwitchApiClient(
 
     public async Task<bool> IsStreamerLiveAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken)
     {
+        var status = await GetStreamStatusAsync(broadcasterUserId, authContext, cancellationToken);
+        return status.IsLive;
+    }
+
+    public async Task<TwitchStreamStatus> GetStreamStatusAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken)
+    {
         using var request = CreateRequest(HttpMethod.Get, $"helix/streams?user_id={Uri.EscapeDataString(broadcasterUserId)}", authContext);
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -87,15 +93,21 @@ public sealed class TwitchApiClient(
                 broadcasterUserId,
                 response.StatusCode,
                 errorBody);
-            return false;
+            return new TwitchStreamStatus(false, null, null);
         }
 
         await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var payload = await JsonSerializer.DeserializeAsync<HelixDataEnvelope<JsonElement>>(
+        var payload = await JsonSerializer.DeserializeAsync<HelixDataEnvelope<TwitchStreamItem>>(
             contentStream,
             TwitchJsonOptions,
             cancellationToken: cancellationToken);
-        return payload?.Data.Count > 0;
+        var stream = payload?.Data.FirstOrDefault();
+        if (stream is null)
+        {
+            return new TwitchStreamStatus(false, null, null);
+        }
+
+        return new TwitchStreamStatus(true, stream.Title, stream.GameName);
     }
 
     public async Task<IReadOnlyCollection<string>> GetCurrentChattersAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken)
@@ -326,6 +338,15 @@ public sealed class TwitchApiClient(
     {
         [JsonPropertyName("user_id")]
         public string UserId { get; init; } = string.Empty;
+    }
+
+    private sealed class TwitchStreamItem
+    {
+        [JsonPropertyName("title")]
+        public string? Title { get; init; }
+
+        [JsonPropertyName("game_name")]
+        public string? GameName { get; init; }
     }
 
     private sealed class TwitchScheduleResponse

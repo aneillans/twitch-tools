@@ -63,6 +63,8 @@ public sealed class BlueSkyConnectionInput
 
 public sealed class BlueSkyLivePostTemplatesInput
 {
+    public bool PostOnStreamStart { get; set; } = true;
+    public bool PostOnStreamStop { get; set; } = true;
     public string? StreamStartedTemplate { get; set; }
     public string? StreamStoppedTemplate { get; set; }
 }

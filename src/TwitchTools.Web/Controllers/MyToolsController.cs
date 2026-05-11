@@ -118,6 +118,8 @@ public sealed class MyToolsController(
                     && !string.IsNullOrWhiteSpace(streamer.BlueSkyAppPassword),
                 BlueSkyTemplates = new BlueSkyLivePostTemplatesInput
                 {
+                    PostOnStreamStart = streamer.BlueSkyPostOnStreamStart,
+                    PostOnStreamStop = streamer.BlueSkyPostOnStreamStop,
                     StreamStartedTemplate = string.IsNullOrWhiteSpace(streamer.BlueSkyStreamStartedTemplate)
                         ? DefaultBlueSkyStartedTemplate
                         : streamer.BlueSkyStreamStartedTemplate,
@@ -410,6 +412,8 @@ public sealed class MyToolsController(
 
         streamer.BlueSkyStreamStartedTemplate = TrimToNull(input.StreamStartedTemplate);
         streamer.BlueSkyStreamStoppedTemplate = TrimToNull(input.StreamStoppedTemplate);
+        streamer.BlueSkyPostOnStreamStart = input.PostOnStreamStart;
+        streamer.BlueSkyPostOnStreamStop = input.PostOnStreamStop;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         TempData["StatusMessage"] = "BlueSky stream announcement templates saved.";

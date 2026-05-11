@@ -55,7 +55,8 @@ public sealed class LiveStatusBackgroundService(
                         continue;
                     }
 
-                    var isLive = await twitchApiClient.IsStreamerLiveAsync(streamer.TwitchUserId, auth, stoppingToken);
+                    var streamStatus = await twitchApiClient.GetStreamStatusAsync(streamer.TwitchUserId, auth, stoppingToken);
+                    var isLive = streamStatus.IsLive;
 
                     var previous = await dbContext.LiveNotificationEvents
                         .AsNoTracking()
@@ -87,7 +88,7 @@ public sealed class LiveStatusBackgroundService(
                         continue;
                     }
 
-                    var postUri = await blueSkyService.PublishLiveStateAsync(streamer, isLive, stoppingToken);
+                    var postUri = await blueSkyService.PublishLiveStateAsync(streamer, isLive, streamStatus, stoppingToken);
 
                     dbContext.LiveNotificationEvents.Add(new LiveNotificationEvent
                     {
