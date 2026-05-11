@@ -6,6 +6,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
+    <meta http-equiv="refresh" content="120" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
         :root {
@@ -29,10 +30,5 @@
 </head>
 <body>
 <div class="value">@(Model.DisplayValue ?? string.Empty)</div>
-<script>
-    setInterval(function () {
-        window.location.reload();
-    }, 15000);
-</script>
 </body>
 </html>
