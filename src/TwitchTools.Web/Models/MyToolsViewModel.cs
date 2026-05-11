@@ -5,7 +5,13 @@ public sealed class MyToolsViewModel
     public bool HasProfile { get; init; }
     public TwitchConnectionInput Twitch { get; init; } = new();
     public BlueSkyConnectionInput BlueSky { get; init; } = new();
+}
+
+public sealed class LiveAutomationViewModel
+{
     public IReadOnlyCollection<DiscordSyncItem> DiscordSyncs { get; init; } = [];
+    public bool IsBlueSkyConfigured { get; init; }
+    public BlueSkyLivePostTemplatesInput BlueSkyTemplates { get; init; } = new();
 }
 
 public sealed class TimedMessagesPageViewModel
@@ -53,6 +59,12 @@ public sealed class BlueSkyConnectionInput
 {
     public string? BlueSkyIdentifier { get; set; }
     public string? BlueSkyAppPassword { get; set; }
+}
+
+public sealed class BlueSkyLivePostTemplatesInput
+{
+    public string? StreamStartedTemplate { get; set; }
+    public string? StreamStoppedTemplate { get; set; }
 }
 
 public sealed class AddTimedMessageInput

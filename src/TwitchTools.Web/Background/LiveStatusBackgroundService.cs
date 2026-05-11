@@ -1,3 +1,4 @@
+using Exceptionless;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TwitchTools.Web.Data;
@@ -77,6 +78,7 @@ public sealed class LiveStatusBackgroundService(
                         {
                             RegisterDiscordRefreshFailure(streamer.Id, now);
                             logger.LogError(ex, "Discord schedule sync failed for {Streamer}.", streamer.DisplayName);
+                            ExceptionlessClient.Default.SubmitException(ex);
                         }
                     }
 
@@ -101,6 +103,7 @@ public sealed class LiveStatusBackgroundService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Live status monitoring cycle failed.");
+                ExceptionlessClient.Default.SubmitException(ex);
             }
 
             await Task.Delay(Interval, stoppingToken);

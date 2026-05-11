@@ -17,7 +17,7 @@ public sealed class BlueSkyApiClient(
     private const int MaxLoggedBodyLength = 512;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    public async Task<string?> PublishLiveStatePostAsync(string streamerName, bool isLive, BlueSkyCredentials credentials, CancellationToken cancellationToken)
+    public async Task<string?> PublishLiveStatePostAsync(string postText, BlueSkyCredentials credentials, CancellationToken cancellationToken)
     {
         try
         {
@@ -27,17 +27,13 @@ public sealed class BlueSkyApiClient(
                 return null;
             }
 
-            var text = isLive
-                ? $"{streamerName} is now live on Twitch."
-                : $"{streamerName} has ended the stream.";
-
             var requestBody = new
             {
                 repo = session.Did,
                 collection = "app.bsky.feed.post",
                 record = new
                 {
-                    text,
+                    text = postText,
                     createdAt = DateTime.UtcNow.ToString("O")
                 }
             };

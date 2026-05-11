@@ -1,0 +1,114 @@
+@model TwitchTools.Web.Models.LiveAutomationViewModel
+@{
+    ViewData["Title"] = "Live Automation";
+}
+
+<h1>Live Automation</h1>
+<p>Manage Discord schedule sync targets and BlueSky stream announcement text.</p>
+
+@if (ViewData["StatusMessage"] is string statusMessage && !string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert alert-info">@statusMessage</div>
+}
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">Discord Schedule Sync Servers</div>
+            <div class="card-body">
+                @if (ViewData["DiscordInviteUrl"] is string discordInviteUrl && !string.IsNullOrWhiteSpace(discordInviteUrl))
+                {
+                    <div class="alert alert-secondary">
+                        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+                            <span>First, invite the bot to your Discord server. The bot needs <strong>Manage Events</strong> permission.</span>
+                            <a class="btn btn-sm btn-primary" href="@discordInviteUrl" target="_blank" rel="noopener noreferrer">Invite Discord Bot</a>
+                        </div>
+                    </div>
+                }
+
+                <p class="text-muted small">
+                    Right-click your server in Discord and select <em>Copy Server ID</em> (requires Developer Mode enabled in Discord settings).
+                </p>
+
+                <form asp-controller="MyTools" asp-action="AddDiscordSync" method="post" class="row g-2 mb-3">
+                    @Html.AntiForgeryToken()
+                    <div class="col-9">
+                        <input class="form-control" name="GuildId" placeholder="Discord Server (Guild) ID" required />
+                    </div>
+                    <div class="col-3 d-grid">
+                        <button class="btn btn-outline-primary" type="submit">Add</button>
+                    </div>
+                </form>
+
+                @if (!Model.DiscordSyncs.Any())
+                {
+                    <p class="text-muted">No Discord servers added yet.</p>
+                }
+                else
+                {
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Server (Guild) ID</th>
+                                <th>Last Synced</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var sync in Model.DiscordSyncs)
+                        {
+                            <tr>
+                                <td class="font-monospace">@sync.GuildId</td>
+                                <td class="text-muted small">
+                                    @(sync.LastSyncedUtc == DateTime.UnixEpoch ? "Never" : sync.LastSyncedUtc.ToString("yyyy-MM-dd HH:mm") + " UTC")
+                                </td>
+                                <td class="text-end">
+                                    <form asp-controller="MyTools" asp-action="SyncDiscordNow" asp-route-id="@sync.Id" method="post" class="d-inline me-1">
+                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Sync now</button>
+                                    </form>
+                                    <form asp-controller="MyTools" asp-action="DeleteDiscordSync" asp-route-id="@sync.Id" method="post" class="d-inline">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">BlueSky Stream Announcement Text</div>
+            <div class="card-body">
+                @if (!Model.IsBlueSkyConfigured)
+                {
+                    <div class="alert alert-warning mb-3">
+                        BlueSky is not configured yet. Save your BlueSky identifier and app password on the
+                        <a asp-controller="MyTools" asp-action="Index" class="alert-link">My Tools page</a>
+                        before editing stream start/stop posts.
+                    </div>
+                }
+
+                <form asp-controller="MyTools" asp-action="SaveBlueSkyTemplates" method="post">
+                    @Html.AntiForgeryToken()
+                    <fieldset disabled="@(!Model.IsBlueSkyConfigured ? "disabled" : null)">
+                        <div class="mb-3">
+                            <label class="form-label" asp-for="BlueSkyTemplates.StreamStartedTemplate">When stream starts</label>
+                            <textarea class="form-control" asp-for="BlueSkyTemplates.StreamStartedTemplate" rows="4" maxlength="500"></textarea>
+                            <div class="form-text">Use <code>{streamer}</code> to insert the streamer display name.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" asp-for="BlueSkyTemplates.StreamStoppedTemplate">When stream stops</label>
+                            <textarea class="form-control" asp-for="BlueSkyTemplates.StreamStoppedTemplate" rows="4" maxlength="500"></textarea>
+                            <div class="form-text">Use <code>{streamer}</code> to insert the streamer display name.</div>
+                        </div>
+                        <button class="btn btn-primary" type="submit">Save BlueSky announcement text</button>
+                    </fieldset>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

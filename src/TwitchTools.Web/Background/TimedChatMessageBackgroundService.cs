@@ -1,3 +1,4 @@
+using Exceptionless;
 using TwitchTools.Web.Services;
 
 namespace TwitchTools.Web.Background;
@@ -21,6 +22,7 @@ public sealed class TimedChatMessageBackgroundService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Timed message dispatch cycle failed.");
+                ExceptionlessClient.Default.SubmitException(ex);
             }
 
             await Task.Delay(Interval, stoppingToken);

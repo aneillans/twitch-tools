@@ -1,3 +1,4 @@
+using Exceptionless;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TwitchTools.Web.Data;
@@ -53,6 +54,7 @@ public sealed class TwitchTokenRefreshBackgroundService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Twitch token refresh cycle failed.");
+                ExceptionlessClient.Default.SubmitException(ex);
             }
 
             await Task.Delay(Interval, stoppingToken);
