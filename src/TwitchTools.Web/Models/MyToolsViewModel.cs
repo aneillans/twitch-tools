@@ -25,6 +25,31 @@ public sealed class OverlaySettingsViewModel
     public string SubscriberOverlayUrl { get; init; } = string.Empty;
     public string FollowerOverlayToken { get; init; } = string.Empty;
     public string SubscriberOverlayToken { get; init; } = string.Empty;
+    public CustomOverlayWidgetInput CustomWidget { get; set; } = new();
+    public string? CustomWidgetOverlayUrl { get; init; }
+    public string? CustomWidgetOverlayToken { get; init; }
+    public DateTime? CustomWidgetUpdatedUtc { get; init; }
+}
+
+public sealed class CustomOverlayWidgetInput
+{
+    public string Name { get; set; } = "Imported StreamElements Widget";
+    public string Html { get; set; } = string.Empty;
+    public string Css { get; set; } = string.Empty;
+    public string Js { get; set; } = string.Empty;
+    public string FieldsJson { get; set; } = "{}";
+    public string DataJson { get; set; } = "{}";
+}
+
+public sealed class CustomOverlayWidgetRuntimeViewModel
+{
+    public string OverlayToken { get; init; } = string.Empty;
+    public string WidgetName { get; init; } = string.Empty;
+    public string Html { get; init; } = string.Empty;
+    public string Css { get; init; } = string.Empty;
+    public string Js { get; init; } = string.Empty;
+    public string FieldDataJson { get; init; } = "{}";
+    public string ChannelProviderId { get; init; } = "0";
 }
 
 public sealed class TwitchConnectionInput

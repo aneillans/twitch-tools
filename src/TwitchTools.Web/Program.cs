@@ -121,6 +121,7 @@ builder.Services.AddScoped<IDiscordScheduleSyncService, DiscordScheduleSyncServi
 builder.Services.AddScoped<ITimedChatMessageService, TimedChatMessageService>();
 builder.Services.AddScoped<IViewerMonitoringService, ViewerMonitoringService>();
 builder.Services.AddScoped<IOverlayService, OverlayService>();
+builder.Services.AddSingleton<IOverlayEventBroker, OverlayEventBroker>();
 
 builder.Services.AddHostedService<LiveStatusBackgroundService>();
 builder.Services.AddHostedService<TimedChatMessageBackgroundService>();

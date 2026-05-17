@@ -40,6 +40,81 @@
     </div>
 </div>
 
+<div class="card mt-4">
+    <div class="card-header">Custom StreamElements-Compatible Widget</div>
+    <div class="card-body">
+        <p class="text-muted mb-3">
+            Paste widget sections from a StreamElements widget export. The overlay runtime will provide StreamElements-compatible shims for
+            <span class="font-monospace">onWidgetLoad</span>, <span class="font-monospace">onEventReceived</span>, and <span class="font-monospace">SE_API.getOverlayStatus()</span>.
+        </p>
+
+        @if (!string.IsNullOrWhiteSpace(Model.CustomWidgetOverlayUrl))
+        {
+            <div class="input-group mb-2">
+                <input id="customOverlayUrlInput" type="text" class="form-control font-monospace" value="@Model.CustomWidgetOverlayUrl" readonly />
+                <button class="btn btn-outline-secondary" type="button" onclick="copyField('customOverlayUrlInput')">Copy</button>
+            </div>
+            <div class="small text-muted mb-3">Token: <span class="font-monospace">@Model.CustomWidgetOverlayToken</span></div>
+            <div class="small text-muted mb-3">
+                Preview mode URL (enables editor simulation):
+                <span class="font-monospace">@Model.CustomWidgetOverlayUrl?editor=1</span>
+            </div>
+        }
+
+        @if (Model.CustomWidgetUpdatedUtc.HasValue)
+        {
+            <div class="small text-muted mb-3">Last updated (UTC): @Model.CustomWidgetUpdatedUtc.Value.ToString("u")</div>
+        }
+
+        <form asp-controller="OverlaySettings" asp-action="SaveCustomWidget" method="post">
+            @Html.AntiForgeryToken()
+            <div class="mb-3">
+                <label class="form-label" for="customWidgetName">Widget Name</label>
+                <input id="customWidgetName" class="form-control" asp-for="CustomWidget.Name" maxlength="128" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="customWidgetHtml">HTML</label>
+                <textarea id="customWidgetHtml" class="form-control font-monospace" asp-for="CustomWidget.Html" rows="8"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="customWidgetCss">CSS</label>
+                <textarea id="customWidgetCss" class="form-control font-monospace" asp-for="CustomWidget.Css" rows="8"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="customWidgetJs">JS</label>
+                <textarea id="customWidgetJs" class="form-control font-monospace" asp-for="CustomWidget.Js" rows="10"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="customWidgetFields">FIELDS JSON</label>
+                <textarea id="customWidgetFields" class="form-control font-monospace" asp-for="CustomWidget.FieldsJson" rows="8"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="customWidgetData">DATA JSON</label>
+                <textarea id="customWidgetData" class="form-control font-monospace" asp-for="CustomWidget.DataJson" rows="4"></textarea>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-primary" type="submit">Save Custom Widget</button>
+                @if (!string.IsNullOrWhiteSpace(Model.CustomWidgetOverlayUrl))
+                {
+                    <a class="btn btn-outline-primary" href="@Model.CustomWidgetOverlayUrl" target="_blank" rel="noopener">Open Overlay</a>
+                    <a class="btn btn-outline-secondary" href="@($"{Model.CustomWidgetOverlayUrl}?editor=1")" target="_blank" rel="noopener">Open Preview Mode</a>
+                }
+            </div>
+        </form>
+
+        <form asp-controller="OverlaySettings" asp-action="SendCustomWidgetTestMessage" method="post" class="mt-3">
+            @Html.AntiForgeryToken()
+            <button class="btn btn-outline-secondary" type="submit">Send Test Chat Message</button>
+        </form>
+    </div>
+</div>
+
 <script>
     function copyField(inputId) {
         const input = document.getElementById(inputId);
