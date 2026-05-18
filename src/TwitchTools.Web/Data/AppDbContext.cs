@@ -11,6 +11,7 @@ public sealed class AppDbContext(
 {
     public DbSet<Streamer> Streamers => Set<Streamer>();
     public DbSet<LiveNotificationEvent> LiveNotificationEvents => Set<LiveNotificationEvent>();
+    public DbSet<SubscriberNotificationEvent> SubscriberNotificationEvents => Set<SubscriberNotificationEvent>();
     public DbSet<DiscordGuildSync> DiscordGuildSyncs => Set<DiscordGuildSync>();
     public DbSet<TimedChatMessage> TimedChatMessages => Set<TimedChatMessage>();
     public DbSet<ViewerDurationSample> ViewerDurationSamples => Set<ViewerDurationSample>();
@@ -65,6 +66,15 @@ public sealed class AppDbContext(
             entity.Property(x => x.BlueSkyPostUri).HasMaxLength(512);
         });
 
+        modelBuilder.Entity<SubscriberNotificationEvent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.StreamerId, x.RecordedUtc });
+            entity.Property(x => x.TwitchUserId).HasMaxLength(64);
+            entity.Property(x => x.TwitchUserLogin).HasMaxLength(128);
+            entity.Property(x => x.TwitchUserName).HasMaxLength(128);
+        });
+
         modelBuilder.Entity<DiscordGuildSync>(entity =>
         {
             entity.HasKey(x => x.Id);
@@ -97,6 +107,11 @@ public sealed class AppDbContext(
         modelBuilder.Entity<LiveNotificationEvent>()
             .HasOne(x => x.Streamer)
             .WithMany(x => x.LiveNotificationEvents)
+            .HasForeignKey(x => x.StreamerId);
+
+        modelBuilder.Entity<SubscriberNotificationEvent>()
+            .HasOne(x => x.Streamer)
+            .WithMany(x => x.SubscriberNotificationEvents)
             .HasForeignKey(x => x.StreamerId);
 
         modelBuilder.Entity<DiscordGuildSync>()

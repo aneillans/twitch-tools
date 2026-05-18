@@ -33,6 +33,7 @@ public sealed class Streamer
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
     public ICollection<LiveNotificationEvent> LiveNotificationEvents { get; set; } = new List<LiveNotificationEvent>();
+    public ICollection<SubscriberNotificationEvent> SubscriberNotificationEvents { get; set; } = new List<SubscriberNotificationEvent>();
     public ICollection<TimedChatMessage> TimedChatMessages { get; set; } = new List<TimedChatMessage>();
     public ICollection<ViewerDurationSample> ViewerDurationSamples { get; set; } = new List<ViewerDurationSample>();
     public OverlaySnapshot? OverlaySnapshot { get; set; }

@@ -120,6 +120,7 @@ builder.Services.AddScoped<IBlueSkyService, BlueSkyService>();
 builder.Services.AddScoped<IDiscordScheduleSyncService, DiscordScheduleSyncService>();
 builder.Services.AddScoped<ITimedChatMessageService, TimedChatMessageService>();
 builder.Services.AddScoped<IViewerMonitoringService, ViewerMonitoringService>();
+builder.Services.AddScoped<ITwitchEventSubService, TwitchEventSubService>();
 builder.Services.AddScoped<IOverlayService, OverlayService>();
 builder.Services.AddSingleton<IOverlayEventBroker, OverlayEventBroker>();
 
@@ -127,6 +128,7 @@ builder.Services.AddHostedService<LiveStatusBackgroundService>();
 builder.Services.AddHostedService<TimedChatMessageBackgroundService>();
 builder.Services.AddHostedService<TwitchTokenRefreshBackgroundService>();
 builder.Services.AddHostedService<ViewerMonitoringBackgroundService>();
+builder.Services.AddHostedService<TwitchEventSubBackgroundService>();
 
 var app = builder.Build();
 

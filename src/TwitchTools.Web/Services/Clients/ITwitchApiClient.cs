@@ -4,6 +4,11 @@ public interface ITwitchApiClient
 {
     Task<TwitchTokenValidationResult> ValidateAccessTokenAsync(string accessToken, CancellationToken cancellationToken);
     Task<TwitchTokenRefreshResult> RefreshAccessTokenAsync(string refreshToken, string clientId, string clientSecret, CancellationToken cancellationToken);
+    Task<TwitchAppAccessTokenResult> GetAppAccessTokenAsync(string clientId, string clientSecret, CancellationToken cancellationToken);
+    Task<TwitchEventSubCreateResult> CreateEventSubSubscriptionAsync(
+        TwitchAuthContext authContext,
+        TwitchEventSubSubscriptionRequest request,
+        CancellationToken cancellationToken);
     Task<TwitchStreamStatus> GetStreamStatusAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<bool> IsStreamerLiveAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<string>> GetCurrentChattersAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
@@ -22,6 +27,29 @@ public sealed record TwitchAuthContext(
     string AccessToken,
     string? BotUserId,
     string? ModeratorUserId);
+
+public sealed record TwitchEventSubSubscriptionRequest(
+    string Type,
+    string Version,
+    IReadOnlyDictionary<string, string> Condition,
+    TwitchEventSubTransport Transport);
+
+public sealed record TwitchEventSubTransport(
+    string Method,
+    string Callback,
+    string Secret);
+
+public sealed record TwitchEventSubCreateResult(
+    bool IsSuccess,
+    bool IsAlreadyExists,
+    int StatusCode,
+    string? ErrorMessage);
+
+public sealed record TwitchAppAccessTokenResult(
+    bool IsSuccess,
+    string? AccessToken,
+    int? ExpiresInSeconds,
+    string? ErrorMessage);
 
 public sealed record TwitchScheduleSegment(
     string SegmentId,
