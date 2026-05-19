@@ -85,7 +85,8 @@ public sealed class TwitchEventSubService(
         var subscription = notificationDocument.RootElement.GetProperty("subscription");
         var subscriptionType = subscription.GetProperty("type").GetString();
 
-        if (!string.Equals(subscriptionType, "channel.subscribe", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(subscriptionType, "channel.subscribe", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(subscriptionType, "channel.subscription.message", StringComparison.OrdinalIgnoreCase))
         {
             logger.LogDebug("Ignoring EventSub notification type {SubscriptionType}.", subscriptionType);
             return new EventSubWebhookResult(StatusCode: StatusCodes.Status204NoContent);
@@ -133,39 +134,133 @@ public sealed class TwitchEventSubService(
 
         foreach (var streamer in streamers)
         {
-            var result = await twitchApiClient.CreateEventSubSubscriptionAsync(
-                auth,
-                new TwitchEventSubSubscriptionRequest(
-                    "channel.subscribe",
-                    "1",
-                    new Dictionary<string, string>(StringComparer.Ordinal)
-                    {
-                        ["broadcaster_user_id"] = streamer.TwitchUserId
-                    },
-                    new TwitchEventSubTransport(
-                        "webhook",
-                        options.EventSubCallbackUrl,
-                        options.EventSubSecret)),
-                cancellationToken);
-
-            if (result.IsSuccess)
-            {
-                logger.LogInformation("Ensured EventSub subscriber subscription for {Streamer}.", streamer.DisplayName);
-                continue;
-            }
-
-            if (result.IsAlreadyExists)
-            {
-                logger.LogDebug("EventSub subscriber subscription already exists for {Streamer}.", streamer.DisplayName);
-                continue;
-            }
-
-            logger.LogWarning(
-                "Failed to ensure EventSub subscriber subscription for {Streamer}. StatusCode={StatusCode}. Error={ErrorMessage}",
-                streamer.DisplayName,
-                result.StatusCode,
-                result.ErrorMessage);
+            await EnsureSubscriptionTypeAsync(streamer, auth, options, "channel.subscribe", cancellationToken);
+            await EnsureSubscriptionTypeAsync(streamer, auth, options, "channel.subscription.message", cancellationToken);
+            await TryPrefillSubscriberSnapshotAsync(streamer, options, cancellationToken);
         }
+    }
+
+    private async Task EnsureSubscriptionTypeAsync(
+        Streamer streamer,
+        TwitchAuthContext appAuth,
+        TwitchOptions options,
+        string eventSubType,
+        CancellationToken cancellationToken)
+    {
+        var result = await twitchApiClient.CreateEventSubSubscriptionAsync(
+            appAuth,
+            new TwitchEventSubSubscriptionRequest(
+                eventSubType,
+                "1",
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["broadcaster_user_id"] = streamer.TwitchUserId
+                },
+                new TwitchEventSubTransport(
+                    "webhook",
+                    options.EventSubCallbackUrl,
+                    options.EventSubSecret)),
+            cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            logger.LogInformation("Ensured EventSub subscription {EventSubType} for {Streamer}.", eventSubType, streamer.DisplayName);
+            return;
+        }
+
+        if (result.IsAlreadyExists)
+        {
+            logger.LogDebug("EventSub subscription {EventSubType} already exists for {Streamer}.", eventSubType, streamer.DisplayName);
+            return;
+        }
+
+        logger.LogWarning(
+            "Failed to ensure EventSub subscription {EventSubType} for {Streamer}. StatusCode={StatusCode}. Error={ErrorMessage}",
+            eventSubType,
+            streamer.DisplayName,
+            result.StatusCode,
+            result.ErrorMessage);
+    }
+
+    private async Task TryPrefillSubscriberSnapshotAsync(Streamer streamer, TwitchOptions options, CancellationToken cancellationToken)
+    {
+        var dbStreamer = await dbContext.Streamers
+            .Include(x => x.OverlaySnapshot)
+            .FirstOrDefaultAsync(x => x.Id == streamer.Id, cancellationToken);
+
+        if (dbStreamer is null)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(dbStreamer.OverlaySnapshot?.LastSubscriberName))
+        {
+            return;
+        }
+
+        var hasEvents = await dbContext.SubscriberNotificationEvents
+            .AsNoTracking()
+            .AnyAsync(x => x.StreamerId == streamer.Id, cancellationToken);
+        if (hasEvents)
+        {
+            return;
+        }
+
+        var clientId = string.IsNullOrWhiteSpace(dbStreamer.TwitchClientId)
+            ? options.DefaultClientId
+            : dbStreamer.TwitchClientId;
+
+        if (string.IsNullOrWhiteSpace(clientId)
+            || string.IsNullOrWhiteSpace(dbStreamer.TwitchStreamerAccessToken)
+            || string.IsNullOrWhiteSpace(dbStreamer.TwitchUserId))
+        {
+            return;
+        }
+
+        var auth = new TwitchAuthContext(
+            clientId,
+            dbStreamer.TwitchStreamerAccessToken,
+            dbStreamer.TwitchBotUserId,
+            dbStreamer.TwitchUserId);
+
+        var candidate = await twitchApiClient.GetLatestSubscriberAsync(dbStreamer.TwitchUserId, auth, cancellationToken);
+        if (candidate is null)
+        {
+            return;
+        }
+
+        var snapshot = dbStreamer.OverlaySnapshot;
+        if (snapshot is null)
+        {
+            snapshot = new OverlaySnapshot
+            {
+                StreamerId = dbStreamer.Id
+            };
+            dbContext.OverlaySnapshots.Add(snapshot);
+            dbStreamer.OverlaySnapshot = snapshot;
+        }
+
+        var recordedUtc = DateTime.UtcNow;
+        dbContext.SubscriberNotificationEvents.Add(new SubscriberNotificationEvent
+        {
+            StreamerId = dbStreamer.Id,
+            TwitchUserId = candidate.UserId,
+            TwitchUserLogin = candidate.UserLogin,
+            TwitchUserName = candidate.UserName,
+            IsGift = false,
+            RecordedUtc = recordedUtc
+        });
+
+        snapshot.LastSubscriberName = candidate.UserName ?? candidate.UserLogin ?? candidate.UserId;
+        snapshot.LastSubscriberUtc = recordedUtc;
+        snapshot.UpdatedUtc = recordedUtc;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Prefilled subscriber snapshot for {Streamer} using a best-effort Helix subscriptions lookup: {SubscriberName}",
+            dbStreamer.DisplayName,
+            snapshot.LastSubscriberName);
     }
 
     private async Task RecordSubscriberAsync(JsonElement eventElement, CancellationToken cancellationToken)

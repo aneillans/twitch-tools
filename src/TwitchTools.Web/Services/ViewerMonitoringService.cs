@@ -106,9 +106,6 @@ public sealed class ViewerMonitoringService(
             snapshot.LastFollowerUtc = latestFollower.FollowedAtUtc?.UtcDateTime ?? DateTime.UtcNow;
         }
 
-        snapshot.LastSubscriberName = null;
-        snapshot.LastSubscriberUtc = null;
-
         snapshot.UpdatedUtc = DateTime.UtcNow;
     }
 
