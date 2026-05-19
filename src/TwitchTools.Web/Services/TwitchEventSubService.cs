@@ -14,6 +14,7 @@ public sealed class TwitchEventSubService(
     AppDbContext dbContext,
     ITwitchApiClient twitchApiClient,
     IOptions<TwitchOptions> twitchOptions,
+    IOptions<FeatureFlagsOptions> featureFlags,
     ILogger<TwitchEventSubService> logger) : ITwitchEventSubService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -98,6 +99,12 @@ public sealed class TwitchEventSubService(
 
     public async Task EnsureSubscriberSubscriptionsAsync(CancellationToken cancellationToken)
     {
+        if (featureFlags.Value.DisableExternalPosting)
+        {
+            logger.LogInformation("Skipping EventSub subscription bootstrap because FeatureFlags:DisableExternalPosting is enabled.");
+            return;
+        }
+
         var options = twitchOptions.Value;
         if (string.IsNullOrWhiteSpace(options.DefaultClientId)
             || string.IsNullOrWhiteSpace(options.OAuthClientSecret)
