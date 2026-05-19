@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0.300 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
 
 COPY TwitchTools.slnx ./
@@ -9,11 +9,11 @@ RUN dotnet restore src/TwitchTools.Web/TwitchTools.Web.csproj
 COPY . .
 RUN dotnet publish src/TwitchTools.Web/TwitchTools.Web.csproj -c Release -o /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
-RUN apt-get update \
-    && apt-get upgrade -y \
-	&& apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+RUN apk update \
+    && apk upgrade \
+	&& apk add --no-cache krb5-libs \
 	&& rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
 
