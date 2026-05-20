@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using TwitchTools.Web.Data;
@@ -6,7 +7,7 @@ using TwitchTools.Web.Models;
 
 namespace TwitchTools.Web.Services;
 
-public sealed class OverlayService(AppDbContext dbContext) : IOverlayService
+public sealed class OverlayService(AppDbContext dbContext, ILogger<OverlayService> logger) : IOverlayService
 {
     private static readonly Regex FieldTokenRegex = new(@"\{([A-Za-z0-9_]+)\}", RegexOptions.Compiled);
 
@@ -107,9 +108,19 @@ public sealed class OverlayService(AppDbContext dbContext) : IOverlayService
 
     public async Task SaveCustomWidgetAsync(string ownerSubject, CustomOverlayWidgetInput input, CancellationToken cancellationToken)
     {
+        logger.LogInformation(
+            "Persisting custom widget for owner {OwnerSubject}. Lengths html={HtmlLength}, css={CssLength}, js={JsLength}, fields={FieldsLength}, data={DataLength}",
+            ownerSubject,
+            input.Html?.Length ?? 0,
+            input.Css?.Length ?? 0,
+            input.Js?.Length ?? 0,
+            input.FieldsJson?.Length ?? 0,
+            input.DataJson?.Length ?? 0);
+
         var streamer = await dbContext.Streamers.FirstOrDefaultAsync(x => x.OwnerSubject == ownerSubject, cancellationToken);
         if (streamer is null)
         {
+            logger.LogWarning("Custom widget save blocked because streamer profile is missing for owner {OwnerSubject}", ownerSubject);
             throw new InvalidOperationException("Save Twitch profile settings first before creating custom overlays.");
         }
 
@@ -118,6 +129,7 @@ public sealed class OverlayService(AppDbContext dbContext) : IOverlayService
             || string.IsNullOrWhiteSpace(input.Js)
             || string.IsNullOrWhiteSpace(input.FieldsJson))
         {
+            logger.LogWarning("Custom widget save validation failed for owner {OwnerSubject}: required section missing", ownerSubject);
             throw new InvalidOperationException("HTML, CSS, JS and FIELDS are required.");
         }
 
@@ -134,6 +146,7 @@ public sealed class OverlayService(AppDbContext dbContext) : IOverlayService
         streamer.CustomOverlayUpdatedUtc = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Custom widget persisted for owner {OwnerSubject} with token {CustomOverlayToken}", ownerSubject, streamer.CustomOverlayToken);
     }
 
     private static Dictionary<string, object?> BuildFieldData(string fieldsJson, string? dataJson)

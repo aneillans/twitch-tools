@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using TwitchTools.Web.Data;
 using TwitchTools.Web.Models;
@@ -13,7 +14,8 @@ namespace TwitchTools.Web.Controllers;
 public sealed class OverlaySettingsController(
     AppDbContext dbContext,
     IOverlayService overlayService,
-    IOverlayEventBroker overlayEventBroker) : Controller
+    IOverlayEventBroker overlayEventBroker,
+    ILogger<OverlaySettingsController> logger) : Controller
 {
     [HttpGet("/my-tools/overlay")]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
@@ -42,6 +44,8 @@ public sealed class OverlaySettingsController(
 
     [HttpPost("/my-tools/overlay/custom-widget")]
     [ValidateAntiForgeryToken]
+    [RequestFormLimits(ValueLengthLimit = 16 * 1024 * 1024, ValueCountLimit = 2048)]
+    [RequestSizeLimit(50 * 1024 * 1024)]
     public async Task<IActionResult> SaveCustomWidget(CustomOverlayWidgetInput input, CancellationToken cancellationToken)
     {
         var ownerSubject = GetOwnerSubject();
@@ -50,14 +54,58 @@ public sealed class OverlaySettingsController(
             return Challenge();
         }
 
+        logger.LogInformation(
+            "Custom widget save requested for owner {OwnerSubject}. Lengths html={HtmlLength}, css={CssLength}, js={JsLength}, fields={FieldsLength}, data={DataLength}",
+            ownerSubject,
+            input.Html?.Length ?? 0,
+            input.Css?.Length ?? 0,
+            input.Js?.Length ?? 0,
+            input.FieldsJson?.Length ?? 0,
+            input.DataJson?.Length ?? 0);
+
+        if (!ModelState.IsValid)
+        {
+            var modelStateErrors = string.Join(" ",
+                ModelState.Values
+                    .SelectMany(v => v.Errors)
+                    .Select(e => string.IsNullOrWhiteSpace(e.ErrorMessage)
+                        ? e.Exception?.Message
+                        : e.ErrorMessage)
+                    .Where(m => !string.IsNullOrWhiteSpace(m)));
+
+            logger.LogWarning("Custom widget save rejected by model binding for owner {OwnerSubject}. Errors: {Errors}",
+                ownerSubject,
+                modelStateErrors);
+
+            var streamerForInvalidModel = await dbContext.Streamers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.OwnerSubject == ownerSubject, cancellationToken);
+
+            if (streamerForInvalidModel is null)
+            {
+                TempData["StatusMessage"] = "Save Twitch profile settings first before using overlay URLs.";
+                return RedirectToAction("Index", "MyTools");
+            }
+
+            ViewData["StatusMessage"] = string.IsNullOrWhiteSpace(modelStateErrors)
+                ? "Unable to save custom widget. The posted form data could not be parsed."
+                : $"Unable to save custom widget: {modelStateErrors}";
+
+            var invalidModelView = BuildViewModel(streamerForInvalidModel);
+            invalidModelView.CustomWidget = input;
+            return View("Index", invalidModelView);
+        }
+
         try
         {
             await overlayService.SaveCustomWidgetAsync(ownerSubject, input, cancellationToken);
+            logger.LogInformation("Custom widget save completed for owner {OwnerSubject}", ownerSubject);
             TempData["StatusMessage"] = "Custom StreamElements widget saved.";
             return RedirectToAction(nameof(Index));
         }
         catch (InvalidOperationException ex)
         {
+            logger.LogWarning(ex, "Custom widget save validation failed for owner {OwnerSubject}", ownerSubject);
             var streamer = await dbContext.Streamers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.OwnerSubject == ownerSubject, cancellationToken);
@@ -69,6 +117,25 @@ public sealed class OverlaySettingsController(
             }
 
             ViewData["StatusMessage"] = ex.Message;
+            var model = BuildViewModel(streamer);
+            model.CustomWidget = input;
+            return View("Index", model);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected custom widget save error for owner {OwnerSubject}", ownerSubject);
+
+            var streamer = await dbContext.Streamers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.OwnerSubject == ownerSubject, cancellationToken);
+
+            if (streamer is null)
+            {
+                TempData["StatusMessage"] = "Save Twitch profile settings first before using overlay URLs.";
+                return RedirectToAction("Index", "MyTools");
+            }
+
+            ViewData["StatusMessage"] = "Unable to save custom widget due to an unexpected error. Check logs for details.";
             var model = BuildViewModel(streamer);
             model.CustomWidget = input;
             return View("Index", model);
