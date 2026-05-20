@@ -82,18 +82,17 @@ public sealed class ViewerMonitoringService(
     private async Task UpdateOverlaySnapshotAsync(Streamer streamer, TwitchAuthContext authContext, CancellationToken cancellationToken)
     {
         var latestFollower = await twitchApiClient.GetLatestFollowerAsync(streamer.TwitchUserId, authContext, cancellationToken);
-        var latestSubscriber = await twitchApiClient.GetLatestSubscriberAsync(streamer.TwitchUserId, authContext, cancellationToken);
-
-        if (latestFollower is null && latestSubscriber is null)
-        {
-            return;
-        }
 
         var snapshot = await dbContext.OverlaySnapshots
             .FirstOrDefaultAsync(x => x.StreamerId == streamer.Id, cancellationToken);
 
         if (snapshot is null)
         {
+            if (latestFollower is null)
+            {
+                return;
+            }
+
             snapshot = new OverlaySnapshot
             {
                 StreamerId = streamer.Id
@@ -105,12 +104,6 @@ public sealed class ViewerMonitoringService(
         {
             snapshot.LastFollowerName = latestFollower.UserName ?? latestFollower.UserLogin ?? latestFollower.UserId;
             snapshot.LastFollowerUtc = latestFollower.FollowedAtUtc?.UtcDateTime ?? DateTime.UtcNow;
-        }
-
-        if (latestSubscriber is not null)
-        {
-            snapshot.LastSubscriberName = latestSubscriber.UserName ?? latestSubscriber.UserLogin ?? latestSubscriber.UserId;
-            snapshot.LastSubscriberUtc = DateTime.UtcNow;
         }
 
         snapshot.UpdatedUtc = DateTime.UtcNow;

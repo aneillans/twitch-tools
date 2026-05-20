@@ -29,6 +29,6 @@
     </style>
 </head>
 <body>
-<div class="value">@(Model.DisplayValue ?? string.Empty)</div>
+<div class="value">@(string.IsNullOrWhiteSpace(Model.DisplayValue) ? Model.EmptyMessage : Model.DisplayValue)</div>
 </body>
 </html>

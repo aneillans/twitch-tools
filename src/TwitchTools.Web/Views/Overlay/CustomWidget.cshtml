@@ -1,0 +1,80 @@
+@model TwitchTools.Web.Models.CustomOverlayWidgetRuntimeViewModel
+@using System.Text.Json
+@{
+    Layout = null;
+    var fieldDataJson = Model.FieldDataJson;
+    var onWidgetLoadDetail = JsonSerializer.Serialize(new
+    {
+        fieldData = JsonSerializer.Deserialize<object>(fieldDataJson),
+        channel = new { providerId = Model.ChannelProviderId },
+        currency = new { symbol = "$" }
+    });
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@Model.WidgetName</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/webfont/1.6.26/webfont.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/twemoji.min.js"></script>
+    <style>
+@Html.Raw(Model.Css)
+    </style>
+</head>
+<body>
+@Html.Raw(Model.Html)
+<script>
+(function () {
+    const overlayToken = @Html.Raw(JsonSerializer.Serialize(Model.OverlayToken));
+    const onWidgetLoadDetail = @Html.Raw(onWidgetLoadDetail);
+    const editorMode = new URLSearchParams(window.location.search).get("editor") === "1";
+
+    window.SE_API = {
+        getOverlayStatus: function () {
+            return Promise.resolve({ isEditorMode: editorMode });
+        }
+    };
+
+    const dispatchWidgetLoad = function () {
+        window.dispatchEvent(new CustomEvent("onWidgetLoad", {
+            detail: onWidgetLoadDetail
+        }));
+    };
+
+    const connectEvents = function () {
+        const stream = new EventSource("/overlay/widgets/" + encodeURIComponent(overlayToken) + "/events");
+        stream.onmessage = function (message) {
+            if (!message || !message.data) {
+                return;
+            }
+
+            try {
+                const payload = JSON.parse(message.data);
+                window.dispatchEvent(new CustomEvent("onEventReceived", {
+                    detail: payload
+                }));
+            } catch {
+                // Ignore malformed event payloads.
+            }
+        };
+    };
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", function () {
+            dispatchWidgetLoad();
+            connectEvents();
+        });
+    } else {
+        dispatchWidgetLoad();
+        connectEvents();
+    }
+})();
+</script>
+<script>
+@Html.Raw(Model.Js)
+</script>
+</body>
+</html>

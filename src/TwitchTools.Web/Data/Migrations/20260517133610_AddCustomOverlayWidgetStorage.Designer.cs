@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TwitchTools.Web.Data;
@@ -11,9 +12,11 @@ using TwitchTools.Web.Data;
 namespace TwitchTools.Web.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260517133610_AddCustomOverlayWidgetStorage")]
+    partial class AddCustomOverlayWidgetStorage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -256,43 +259,6 @@ namespace TwitchTools.Web.Data.Migrations
                     b.ToTable("Streamers");
                 });
 
-            modelBuilder.Entity("TwitchTools.Web.Domain.SubscriberNotificationEvent", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<bool>("IsGift")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("RecordedUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("StreamerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TwitchUserId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("TwitchUserLogin")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("TwitchUserName")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StreamerId", "RecordedUtc");
-
-                    b.ToTable("SubscriberNotificationEvents");
-                });
-
             modelBuilder.Entity("TwitchTools.Web.Domain.TimedChatMessage", b =>
                 {
                     b.Property<long>("Id")
@@ -387,17 +353,6 @@ namespace TwitchTools.Web.Data.Migrations
                     b.Navigation("Streamer");
                 });
 
-            modelBuilder.Entity("TwitchTools.Web.Domain.SubscriberNotificationEvent", b =>
-                {
-                    b.HasOne("TwitchTools.Web.Domain.Streamer", "Streamer")
-                        .WithMany("SubscriberNotificationEvents")
-                        .HasForeignKey("StreamerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Streamer");
-                });
-
             modelBuilder.Entity("TwitchTools.Web.Domain.TimedChatMessage", b =>
                 {
                     b.HasOne("TwitchTools.Web.Domain.Streamer", "Streamer")
@@ -425,8 +380,6 @@ namespace TwitchTools.Web.Data.Migrations
                     b.Navigation("LiveNotificationEvents");
 
                     b.Navigation("OverlaySnapshot");
-
-                    b.Navigation("SubscriberNotificationEvents");
 
                     b.Navigation("TimedChatMessages");
 

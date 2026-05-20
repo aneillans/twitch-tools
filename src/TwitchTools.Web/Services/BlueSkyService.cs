@@ -1,10 +1,13 @@
 using TwitchTools.Web.Domain;
+using Microsoft.Extensions.Options;
+using TwitchTools.Web.Options;
 using TwitchTools.Web.Services.Clients;
 
 namespace TwitchTools.Web.Services;
 
 public sealed class BlueSkyService(
     IBlueSkyApiClient blueSkyApiClient,
+    IOptions<FeatureFlagsOptions> featureFlags,
     ILogger<BlueSkyService> logger) : IBlueSkyService
 {
     private const string DefaultStreamStartedTemplate = "{streamer} is now live on Twitch.";
@@ -12,6 +15,12 @@ public sealed class BlueSkyService(
 
     public async Task<string?> PublishLiveStateAsync(Streamer streamer, bool isLive, TwitchStreamStatus streamStatus, CancellationToken cancellationToken)
     {
+        if (featureFlags.Value.DisableExternalPosting)
+        {
+            logger.LogInformation("Skipping BlueSky publish for {Streamer} because FeatureFlags:DisableExternalPosting is enabled.", streamer.DisplayName);
+            return null;
+        }
+
         if (string.IsNullOrWhiteSpace(streamer.BlueSkyIdentifier) || string.IsNullOrWhiteSpace(streamer.BlueSkyAppPassword))
         {
             logger.LogWarning("Skipping BlueSky publish for {Streamer} because credentials are missing.", streamer.DisplayName);

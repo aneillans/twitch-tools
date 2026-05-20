@@ -75,6 +75,75 @@ public sealed class TwitchApiClient(
             null);
     }
 
+    public async Task<TwitchAppAccessTokenResult> GetAppAccessTokenAsync(string clientId, string clientSecret, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://id.twitch.tv/oauth2/token")
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_id"] = clientId,
+                ["client_secret"] = clientSecret,
+                ["grant_type"] = "client_credentials"
+            })
+        };
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            return new TwitchAppAccessTokenResult(false, null, null, errorBody);
+        }
+
+        await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var payload = await JsonSerializer.DeserializeAsync<TwitchClientCredentialsResponse>(
+            contentStream,
+            TwitchJsonOptions,
+            cancellationToken: cancellationToken);
+
+        return new TwitchAppAccessTokenResult(true, payload?.AccessToken, payload?.ExpiresIn, null);
+    }
+
+    public async Task<TwitchEventSubCreateResult> CreateEventSubSubscriptionAsync(
+        TwitchAuthContext authContext,
+        TwitchEventSubSubscriptionRequest request,
+        CancellationToken cancellationToken)
+    {
+        using var httpRequest = CreateRequest(HttpMethod.Post, "helix/eventsub/subscriptions", authContext);
+        httpRequest.Content = new StringContent(
+            JsonSerializer.Serialize(new
+            {
+                type = request.Type,
+                version = request.Version,
+                condition = request.Condition,
+                transport = new
+                {
+                    method = request.Transport.Method,
+                    callback = request.Transport.Callback,
+                    secret = request.Transport.Secret
+                }
+            }),
+            Encoding.UTF8,
+            "application/json");
+
+        using var response = await httpClient.SendAsync(httpRequest, cancellationToken);
+        if (response.IsSuccessStatusCode)
+        {
+            return new TwitchEventSubCreateResult(true, false, (int)response.StatusCode, null);
+        }
+
+        if ((int)response.StatusCode == 409)
+        {
+            return new TwitchEventSubCreateResult(false, true, (int)response.StatusCode, null);
+        }
+
+        var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        logger.LogWarning(
+            "Twitch EventSub subscription create failed: {StatusCode}. Response: {ResponseBody}",
+            response.StatusCode,
+            errorBody);
+        return new TwitchEventSubCreateResult(false, false, (int)response.StatusCode, errorBody);
+    }
+
     public async Task<bool> IsStreamerLiveAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken)
     {
         var status = await GetStreamStatusAsync(broadcasterUserId, authContext, cancellationToken);
@@ -104,8 +173,16 @@ public sealed class TwitchApiClient(
         var stream = payload?.Data.FirstOrDefault();
         if (stream is null)
         {
+            logger.LogDebug("Twitch streams response for {Broadcaster} returned no live stream.", broadcasterUserId);
             return new TwitchStreamStatus(false, null, null);
         }
+
+        logger.LogDebug(
+            "Twitch streams response for {Broadcaster}: IsLive={IsLive}, Title={Title}, GameName={GameName}",
+            broadcasterUserId,
+            true,
+            stream.Title,
+            stream.GameName);
 
         return new TwitchStreamStatus(true, stream.Title, stream.GameName);
     }
@@ -231,8 +308,17 @@ public sealed class TwitchApiClient(
         var item = payload?.Data.FirstOrDefault();
         if (item is null || string.IsNullOrWhiteSpace(item.UserId))
         {
+            logger.LogDebug("Twitch follower response for {Broadcaster} returned no follower.", broadcasterUserId);
             return null;
         }
+
+        logger.LogDebug(
+            "Twitch follower response for {Broadcaster}: UserId={UserId}, UserLogin={UserLogin}, UserName={UserName}, FollowedAt={FollowedAtUtc}",
+            broadcasterUserId,
+            item.UserId,
+            item.UserLogin,
+            item.UserName,
+            item.FollowedAt);
 
         return new TwitchFollowerEvent(item.UserId, item.UserLogin, item.UserName, item.FollowedAt);
     }
@@ -264,8 +350,16 @@ public sealed class TwitchApiClient(
         var item = payload?.Data.FirstOrDefault();
         if (item is null || string.IsNullOrWhiteSpace(item.UserId))
         {
+            logger.LogDebug("Twitch subscriber response for {Broadcaster} returned no subscriber.", broadcasterUserId);
             return null;
         }
+
+        logger.LogDebug(
+            "Twitch subscriber response for {Broadcaster}: UserId={UserId}, UserLogin={UserLogin}, UserName={UserName}",
+            broadcasterUserId,
+            item.UserId,
+            item.UserLogin,
+            item.UserName);
 
         return new TwitchSubscriberEvent(item.UserId, item.UserLogin, item.UserName);
     }
@@ -437,6 +531,15 @@ public sealed class TwitchApiClient(
 
         [JsonPropertyName("refresh_token")]
         public string? RefreshToken { get; init; }
+
+        [JsonPropertyName("expires_in")]
+        public int? ExpiresIn { get; init; }
+    }
+
+    private sealed class TwitchClientCredentialsResponse
+    {
+        [JsonPropertyName("access_token")]
+        public string? AccessToken { get; init; }
 
         [JsonPropertyName("expires_in")]
         public int? ExpiresIn { get; init; }

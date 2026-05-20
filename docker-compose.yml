@@ -56,6 +56,7 @@ services:
       Twitch__OAuthRedirectUri: http://localhost:8080/my-tools/connect/twitch/callback
       Discord__BotClientId: ${DISCORD_BOT_CLIENT_ID:-}
       Encryption__Salt: ${ENCRYPTION_SALT:-replace-with-long-random-value}
+      FeatureFlags__DisableExternalPosting: ${FEATURE_DISABLE_EXTERNAL_POSTING:-false}
     ports:
       - "8080:8080"
     depends_on:

@@ -22,6 +22,7 @@ builder.Services.Configure<TwitchOptions>(builder.Configuration.GetSection(Twitc
 builder.Services.Configure<BlueSkyOptions>(builder.Configuration.GetSection(BlueSkyOptions.SectionName));
 builder.Services.Configure<DiscordOptions>(builder.Configuration.GetSection(DiscordOptions.SectionName));
 builder.Services.Configure<EncryptionOptions>(builder.Configuration.GetSection(EncryptionOptions.SectionName));
+builder.Services.Configure<FeatureFlagsOptions>(builder.Configuration.GetSection(FeatureFlagsOptions.SectionName));
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
@@ -120,12 +121,15 @@ builder.Services.AddScoped<IBlueSkyService, BlueSkyService>();
 builder.Services.AddScoped<IDiscordScheduleSyncService, DiscordScheduleSyncService>();
 builder.Services.AddScoped<ITimedChatMessageService, TimedChatMessageService>();
 builder.Services.AddScoped<IViewerMonitoringService, ViewerMonitoringService>();
+builder.Services.AddScoped<ITwitchEventSubService, TwitchEventSubService>();
 builder.Services.AddScoped<IOverlayService, OverlayService>();
+builder.Services.AddSingleton<IOverlayEventBroker, OverlayEventBroker>();
 
 builder.Services.AddHostedService<LiveStatusBackgroundService>();
 builder.Services.AddHostedService<TimedChatMessageBackgroundService>();
 builder.Services.AddHostedService<TwitchTokenRefreshBackgroundService>();
 builder.Services.AddHostedService<ViewerMonitoringBackgroundService>();
+builder.Services.AddHostedService<TwitchEventSubBackgroundService>();
 
 var app = builder.Build();
 

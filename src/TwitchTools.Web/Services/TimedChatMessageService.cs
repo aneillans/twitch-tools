@@ -10,10 +10,17 @@ public sealed class TimedChatMessageService(
     AppDbContext dbContext,
     ITwitchApiClient twitchApiClient,
     IOptions<TwitchOptions> twitchOptions,
+    IOptions<FeatureFlagsOptions> featureFlags,
     ILogger<TimedChatMessageService> logger) : ITimedChatMessageService
 {
     public async Task DispatchDueMessagesAsync(CancellationToken cancellationToken)
     {
+        if (featureFlags.Value.DisableExternalPosting)
+        {
+            logger.LogInformation("Skipping timed chat message dispatch because FeatureFlags:DisableExternalPosting is enabled.");
+            return;
+        }
+
         var now = DateTime.UtcNow;
         var dueMessages = await dbContext.TimedChatMessages
             .Include(x => x.Streamer)

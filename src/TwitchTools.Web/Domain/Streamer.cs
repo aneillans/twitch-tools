@@ -22,9 +22,18 @@ public sealed class Streamer
     public string OverlayToken { get; set; } = string.Empty;
     public string FollowerOverlayToken { get; set; } = string.Empty;
     public string SubscriberOverlayToken { get; set; } = string.Empty;
+    public string? CustomOverlayToken { get; set; }
+    public string? CustomOverlayName { get; set; }
+    public string? CustomOverlayHtml { get; set; }
+    public string? CustomOverlayCss { get; set; }
+    public string? CustomOverlayJs { get; set; }
+    public string? CustomOverlayFieldsJson { get; set; }
+    public string? CustomOverlayDataJson { get; set; }
+    public DateTime? CustomOverlayUpdatedUtc { get; set; }
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
     public ICollection<LiveNotificationEvent> LiveNotificationEvents { get; set; } = new List<LiveNotificationEvent>();
+    public ICollection<SubscriberNotificationEvent> SubscriberNotificationEvents { get; set; } = new List<SubscriberNotificationEvent>();
     public ICollection<TimedChatMessage> TimedChatMessages { get; set; } = new List<TimedChatMessage>();
     public ICollection<ViewerDurationSample> ViewerDurationSamples { get; set; } = new List<ViewerDurationSample>();
     public OverlaySnapshot? OverlaySnapshot { get; set; }

@@ -12,6 +12,7 @@ public sealed class DiscordScheduleSyncService(
     ITwitchApiClient twitchApiClient,
     IDiscordApiClient discordApiClient,
     IOptions<TwitchOptions> twitchOptions,
+    IOptions<FeatureFlagsOptions> featureFlags,
     ILogger<DiscordScheduleSyncService> logger) : IDiscordScheduleSyncService
 {
     // Embedded in every event description so the bot only touches events it created.
@@ -19,6 +20,12 @@ public sealed class DiscordScheduleSyncService(
 
     public async Task SyncScheduleAsync(Streamer streamer, CancellationToken cancellationToken)
     {
+        if (featureFlags.Value.DisableExternalPosting)
+        {
+            logger.LogInformation("Skipping Discord schedule sync for {Streamer} because FeatureFlags:DisableExternalPosting is enabled.", streamer.DisplayName);
+            return;
+        }
+
         var auth = BuildAuth(streamer, twitchOptions.Value);
         if (auth is null)
         {
