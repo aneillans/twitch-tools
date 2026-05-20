@@ -46,7 +46,7 @@ public sealed class OverlaySettingsController(
     [ValidateAntiForgeryToken]
     [RequestFormLimits(ValueLengthLimit = 16 * 1024 * 1024, ValueCountLimit = 2048)]
     [RequestSizeLimit(50 * 1024 * 1024)]
-    public async Task<IActionResult> SaveCustomWidget(CustomOverlayWidgetInput input, CancellationToken cancellationToken)
+    public async Task<IActionResult> SaveCustomWidget([Bind(Prefix = "CustomWidget")] CustomOverlayWidgetInput input, CancellationToken cancellationToken)
     {
         var ownerSubject = GetOwnerSubject();
         if (string.IsNullOrWhiteSpace(ownerSubject))
