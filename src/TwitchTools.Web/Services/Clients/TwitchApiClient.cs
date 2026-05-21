@@ -144,6 +144,60 @@ public sealed class TwitchApiClient(
         return new TwitchEventSubCreateResult(false, false, (int)response.StatusCode, errorBody);
     }
 
+    public async Task<TwitchEventSubListResult> GetEventSubSubscriptionsAsync(TwitchAuthContext authContext, CancellationToken cancellationToken)
+    {
+        var allSubs = new List<TwitchEventSubSubscriptionInfo>();
+        string? cursor = null;
+        var totalCost = 0;
+        var maxTotalCost = 0;
+
+        do
+        {
+            var url = cursor is null
+                ? "helix/eventsub/subscriptions?first=100"
+                : $"helix/eventsub/subscriptions?first=100&after={Uri.EscapeDataString(cursor)}";
+
+            using var request = CreateRequest(HttpMethod.Get, url, authContext);
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                logger.LogWarning("Twitch EventSub list failed: {StatusCode}. Response: {ResponseBody}", response.StatusCode, errorBody);
+                return new TwitchEventSubListResult(false, [], 0, 0, errorBody);
+            }
+
+            await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var payload = await JsonSerializer.DeserializeAsync<TwitchEventSubListResponse>(contentStream, TwitchJsonOptions, cancellationToken);
+            if (payload?.Data is null) break;
+
+            totalCost = payload.TotalCost;
+            maxTotalCost = payload.MaxTotalCost;
+
+            foreach (var item in payload.Data)
+            {
+                allSubs.Add(new TwitchEventSubSubscriptionInfo(
+                    item.Id ?? string.Empty,
+                    item.Status ?? string.Empty,
+                    item.Type ?? string.Empty,
+                    item.Version ?? string.Empty,
+                    (IReadOnlyDictionary<string, string>?)item.Condition ?? new Dictionary<string, string>(),
+                    item.CreatedAt));
+            }
+
+            cursor = payload.Pagination?.Cursor;
+        } while (cursor is not null);
+
+        return new TwitchEventSubListResult(true, allSubs, totalCost, maxTotalCost, null);
+    }
+
+    public async Task<bool> DeleteEventSubSubscriptionAsync(string subscriptionId, TwitchAuthContext authContext, CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Delete, $"helix/eventsub/subscriptions?id={Uri.EscapeDataString(subscriptionId)}", authContext);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        return (int)response.StatusCode == 204;
+    }
+
     public async Task<bool> IsStreamerLiveAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken)
     {
         var status = await GetStreamStatusAsync(broadcasterUserId, authContext, cancellationToken);
@@ -420,6 +474,48 @@ public sealed class TwitchApiClient(
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authContext.AccessToken);
         request.Headers.Add("Client-Id", authContext.ClientId);
         return request;
+    }
+
+    private sealed class TwitchEventSubListResponse
+    {
+        [JsonPropertyName("data")]
+        public List<TwitchEventSubListItem> Data { get; init; } = [];
+
+        [JsonPropertyName("total_cost")]
+        public int TotalCost { get; init; }
+
+        [JsonPropertyName("max_total_cost")]
+        public int MaxTotalCost { get; init; }
+
+        [JsonPropertyName("pagination")]
+        public TwitchEventSubPagination? Pagination { get; init; }
+    }
+
+    private sealed class TwitchEventSubListItem
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; init; }
+
+        [JsonPropertyName("status")]
+        public string? Status { get; init; }
+
+        [JsonPropertyName("type")]
+        public string? Type { get; init; }
+
+        [JsonPropertyName("version")]
+        public string? Version { get; init; }
+
+        [JsonPropertyName("condition")]
+        public Dictionary<string, string>? Condition { get; init; }
+
+        [JsonPropertyName("created_at")]
+        public DateTime CreatedAt { get; init; }
+    }
+
+    private sealed class TwitchEventSubPagination
+    {
+        [JsonPropertyName("cursor")]
+        public string? Cursor { get; init; }
     }
 
     private sealed class HelixDataEnvelope<T>

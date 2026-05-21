@@ -15,6 +15,7 @@ public sealed class TwitchEventSubService(
     ITwitchApiClient twitchApiClient,
     IOptions<TwitchOptions> twitchOptions,
     IOptions<FeatureFlagsOptions> featureFlags,
+    IOverlayEventBroker overlayEventBroker,
     ILogger<TwitchEventSubService> logger) : ITwitchEventSubService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -86,6 +87,12 @@ public sealed class TwitchEventSubService(
         var subscription = notificationDocument.RootElement.GetProperty("subscription");
         var subscriptionType = subscription.GetProperty("type").GetString();
 
+        if (string.Equals(subscriptionType, "channel.chat.message", StringComparison.OrdinalIgnoreCase))
+        {
+            await HandleChatMessageAsync(notificationDocument.RootElement.GetProperty("event"), cancellationToken);
+            return new EventSubWebhookResult(StatusCode: StatusCodes.Status204NoContent);
+        }
+
         if (!string.Equals(subscriptionType, "channel.subscribe", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(subscriptionType, "channel.subscription.message", StringComparison.OrdinalIgnoreCase))
         {
@@ -143,6 +150,18 @@ public sealed class TwitchEventSubService(
         {
             await EnsureSubscriptionTypeAsync(streamer, auth, options, "channel.subscribe", cancellationToken);
             await EnsureSubscriptionTypeAsync(streamer, auth, options, "channel.subscription.message", cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(streamer.CustomOverlayToken))
+            {
+                await EnsureSubscriptionTypeAsync(
+                    streamer,
+                    auth,
+                    options,
+                    "channel.chat.message",
+                    cancellationToken,
+                    extraCondition: ("user_id", streamer.TwitchUserId));
+            }
+
             await TryPrefillSubscriberSnapshotAsync(streamer, options, cancellationToken);
         }
     }
@@ -152,17 +171,25 @@ public sealed class TwitchEventSubService(
         TwitchAuthContext appAuth,
         TwitchOptions options,
         string eventSubType,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        (string Key, string Value)? extraCondition = null)
     {
+        var condition = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["broadcaster_user_id"] = streamer.TwitchUserId
+        };
+
+        if (extraCondition.HasValue)
+        {
+            condition[extraCondition.Value.Key] = extraCondition.Value.Value;
+        }
+
         var result = await twitchApiClient.CreateEventSubSubscriptionAsync(
             appAuth,
             new TwitchEventSubSubscriptionRequest(
                 eventSubType,
                 "1",
-                new Dictionary<string, string>(StringComparer.Ordinal)
-                {
-                    ["broadcaster_user_id"] = streamer.TwitchUserId
-                },
+                condition,
                 new TwitchEventSubTransport(
                     "webhook",
                     options.EventSubCallbackUrl,
@@ -270,6 +297,105 @@ public sealed class TwitchEventSubService(
             snapshot.LastSubscriberName);
     }
 
+    private async Task HandleChatMessageAsync(JsonElement eventElement, CancellationToken cancellationToken)
+    {
+        var broadcasterId = eventElement.TryGetProperty("broadcaster_user_id", out var bElement) && bElement.ValueKind == JsonValueKind.String
+            ? bElement.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(broadcasterId))
+        {
+            return;
+        }
+
+        var streamer = await dbContext.Streamers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.TwitchUserId == broadcasterId, cancellationToken);
+
+        if (streamer is null || string.IsNullOrWhiteSpace(streamer.CustomOverlayToken))
+        {
+            return;
+        }
+
+        var chatterLogin = eventElement.TryGetProperty("chatter_user_login", out var loginElement) && loginElement.ValueKind == JsonValueKind.String
+            ? loginElement.GetString() ?? string.Empty
+            : string.Empty;
+        var chatterName = eventElement.TryGetProperty("chatter_user_name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String
+            ? nameElement.GetString() ?? chatterLogin
+            : chatterLogin;
+        var chatterId = eventElement.TryGetProperty("chatter_user_id", out var idElement) && idElement.ValueKind == JsonValueKind.String
+            ? idElement.GetString() ?? string.Empty
+            : string.Empty;
+        var messageId = eventElement.TryGetProperty("message_id", out var msgIdElement) && msgIdElement.ValueKind == JsonValueKind.String
+            ? msgIdElement.GetString() ?? string.Empty
+            : string.Empty;
+        var color = eventElement.TryGetProperty("color", out var colorElement) && colorElement.ValueKind == JsonValueKind.String
+            ? colorElement.GetString() ?? string.Empty
+            : string.Empty;
+
+        var messageText = string.Empty;
+        if (eventElement.TryGetProperty("message", out var messageElement) && messageElement.ValueKind == JsonValueKind.Object
+            && messageElement.TryGetProperty("text", out var textElement) && textElement.ValueKind == JsonValueKind.String)
+        {
+            messageText = textElement.GetString() ?? string.Empty;
+        }
+
+        var isSub = false;
+        var isMod = false;
+        var badgesList = new List<object>();
+        if (eventElement.TryGetProperty("badges", out var badgesElement) && badgesElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var badge in badgesElement.EnumerateArray())
+            {
+                var setId = badge.TryGetProperty("set_id", out var setIdEl) && setIdEl.ValueKind == JsonValueKind.String
+                    ? setIdEl.GetString() ?? string.Empty
+                    : string.Empty;
+                var badgeId = badge.TryGetProperty("id", out var badgeIdEl) && badgeIdEl.ValueKind == JsonValueKind.String
+                    ? badgeIdEl.GetString() ?? string.Empty
+                    : string.Empty;
+                if (string.Equals(setId, "subscriber", StringComparison.OrdinalIgnoreCase)) isSub = true;
+                if (string.Equals(setId, "moderator", StringComparison.OrdinalIgnoreCase)) isMod = true;
+                badgesList.Add(new { type = setId, version = badgeId });
+            }
+        }
+
+        var payload = new
+        {
+            listener = "message",
+            @event = new
+            {
+                data = new
+                {
+                    text = messageText,
+                    displayName = chatterName,
+                    nick = chatterLogin,
+                    userId = chatterId,
+                    msgId = messageId,
+                    badges = badgesList,
+                    tags = new
+                    {
+                        badges = string.Empty,
+                        subscriber = isSub ? "1" : "0",
+                        mod = isMod ? "1" : "0",
+                        color = string.IsNullOrWhiteSpace(color) ? "#FFFFFF" : color
+                    }
+                },
+                renderedText = messageText
+            }
+        };
+
+        await overlayEventBroker.PublishAsync(
+            streamer.CustomOverlayToken,
+            JsonSerializer.Serialize(payload),
+            cancellationToken);
+
+        logger.LogDebug(
+            "Published chat message to overlay for {Streamer}. User={ChatterName}, MsgId={MessageId}",
+            streamer.DisplayName,
+            chatterName,
+            messageId);
+    }
+
     private async Task RecordSubscriberAsync(JsonElement eventElement, CancellationToken cancellationToken)
     {
         var streamerId = eventElement.GetProperty("broadcaster_user_id").GetString();
@@ -332,6 +458,65 @@ public sealed class TwitchEventSubService(
             isGift);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<EventSubDiagnosticsResult> GetDiagnosticsAsync(CancellationToken cancellationToken)
+    {
+        var options = twitchOptions.Value;
+        if (string.IsNullOrWhiteSpace(options.DefaultClientId) || string.IsNullOrWhiteSpace(options.OAuthClientSecret))
+        {
+            return new EventSubDiagnosticsResult(false, [], 0, 0, "Twitch credentials are not configured.");
+        }
+
+        var appToken = await twitchApiClient.GetAppAccessTokenAsync(options.DefaultClientId, options.OAuthClientSecret, cancellationToken);
+        if (!appToken.IsSuccess || string.IsNullOrWhiteSpace(appToken.AccessToken))
+        {
+            return new EventSubDiagnosticsResult(true, [], 0, 0, $"Failed to obtain app access token: {appToken.ErrorMessage}");
+        }
+
+        var auth = new TwitchAuthContext(options.DefaultClientId, appToken.AccessToken, null, null);
+        var result = await twitchApiClient.GetEventSubSubscriptionsAsync(auth, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return new EventSubDiagnosticsResult(true, [], 0, 0, $"Failed to list EventSub subscriptions: {result.ErrorMessage}");
+        }
+
+        var statuses = result.Subscriptions
+            .Select(s => new EventSubSubscriptionStatus(s.Id, s.Status, s.Type, s.Version, s.Condition, s.CreatedAt))
+            .ToList();
+
+        return new EventSubDiagnosticsResult(true, statuses, result.TotalCost, result.MaxTotalCost, null);
+    }
+
+    public async Task ForceResyncSubscriptionsAsync(CancellationToken cancellationToken)
+    {
+        var options = twitchOptions.Value;
+        if (string.IsNullOrWhiteSpace(options.DefaultClientId) || string.IsNullOrWhiteSpace(options.OAuthClientSecret))
+        {
+            logger.LogWarning("Cannot force resync EventSub subscriptions: credentials not configured.");
+            return;
+        }
+
+        var appToken = await twitchApiClient.GetAppAccessTokenAsync(options.DefaultClientId, options.OAuthClientSecret, cancellationToken);
+        if (!appToken.IsSuccess || string.IsNullOrWhiteSpace(appToken.AccessToken))
+        {
+            logger.LogWarning("Cannot force resync EventSub subscriptions: failed to get app token. {ErrorMessage}", appToken.ErrorMessage);
+            return;
+        }
+
+        var auth = new TwitchAuthContext(options.DefaultClientId, appToken.AccessToken, null, null);
+        var listResult = await twitchApiClient.GetEventSubSubscriptionsAsync(auth, cancellationToken);
+        if (listResult.IsSuccess)
+        {
+            foreach (var sub in listResult.Subscriptions)
+            {
+                await twitchApiClient.DeleteEventSubSubscriptionAsync(sub.Id, auth, cancellationToken);
+                logger.LogInformation("Deleted EventSub subscription {Id} ({Type}) during force resync.", sub.Id, sub.Type);
+            }
+        }
+
+        await EnsureSubscriberSubscriptionsAsync(cancellationToken);
+        logger.LogInformation("Force resync of EventSub subscriptions completed.");
     }
 
     private static bool IsValidSignature(string secret, string messageId, string messageTimestamp, string rawBody, string messageSignature)
