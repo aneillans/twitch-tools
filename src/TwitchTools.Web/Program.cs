@@ -80,6 +80,7 @@ builder.Services.AddAuthentication(options =>
 
                 AddRoleClaims(identity, "realm_access", "roles");
                 AddResourceRoleClaims(identity, context.Options.ClientId ?? string.Empty);
+                AddGroupClaimsAsRoles(identity, "groups");
 
                 // Keycloak commonly emits role claims in the access token; ensure they are available for policies.
                 AddRolesFromJwt(identity, context.TokenEndpointResponse?.AccessToken, context.Options.ClientId ?? string.Empty);
@@ -308,9 +309,89 @@ static void AddRolesFromJwt(ClaimsIdentity identity, string? jwt, string clientI
 
 static void AddRoleClaim(ClaimsIdentity identity, string role)
 {
+    if (string.IsNullOrWhiteSpace(role))
+    {
+        return;
+    }
+
     if (!identity.HasClaim("roles", role))
     {
         identity.AddClaim(new Claim("roles", role));
+    }
+
+    if (!identity.HasClaim(ClaimTypes.Role, role))
+    {
+        identity.AddClaim(new Claim(ClaimTypes.Role, role));
+    }
+}
+
+static void AddGroupClaimsAsRoles(ClaimsIdentity identity, string groupClaimType)
+{
+    var groupClaims = identity.FindAll(groupClaimType).Select(c => c.Value).ToList();
+    if (groupClaims.Count == 0)
+    {
+        return;
+    }
+
+    foreach (var value in groupClaims)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            continue;
+        }
+
+        if (value.TrimStart().StartsWith("[", StringComparison.Ordinal))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(value);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                foreach (var groupName in doc.RootElement.EnumerateArray().Select(x => x.GetString()))
+                {
+                    foreach (var candidate in GetGroupRoleCandidates(groupName))
+                    {
+                        AddRoleClaim(identity, candidate);
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore malformed group claim payloads.
+            }
+
+            continue;
+        }
+
+        foreach (var candidate in GetGroupRoleCandidates(value))
+        {
+            AddRoleClaim(identity, candidate);
+        }
+    }
+}
+
+static IEnumerable<string> GetGroupRoleCandidates(string? rawGroup)
+{
+    if (string.IsNullOrWhiteSpace(rawGroup))
+    {
+        yield break;
+    }
+
+    var normalized = rawGroup.Trim().Trim('/');
+    if (string.IsNullOrWhiteSpace(normalized))
+    {
+        yield break;
+    }
+
+    yield return normalized;
+
+    var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    foreach (var segment in segments)
+    {
+        yield return segment;
     }
 }
 
