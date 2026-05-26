@@ -177,7 +177,9 @@ if (!Directory.Exists(exceptionlessStoragePath))
 }
 
 app.UseForwardedHeaders();
-app.UseHttpsRedirection();
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/eventsub/twitch", StringComparison.OrdinalIgnoreCase),
+    branch => branch.UseHttpsRedirection());
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
