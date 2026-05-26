@@ -175,17 +175,38 @@ public sealed class TwitchEventSubService(
 
             if (!string.IsNullOrWhiteSpace(streamer.CustomOverlayToken))
             {
-                var chatResult = await EnsureSubscriptionTypeAsync(
-                    streamer,
-                    auth,
-                    options,
-                    "channel.chat.message",
-                    cancellationToken,
-                    extraCondition: ("user_id", streamer.TwitchUserId));
+                var chatClientId = string.IsNullOrWhiteSpace(streamer.TwitchClientId)
+                    ? options.DefaultClientId
+                    : streamer.TwitchClientId;
 
-                ensuredCount += chatResult.EnsuredCount;
-                alreadyExistsCount += chatResult.AlreadyExistsCount;
-                failedCount += chatResult.FailedCount;
+                if (string.IsNullOrWhiteSpace(chatClientId)
+                    || string.IsNullOrWhiteSpace(streamer.TwitchStreamerAccessToken))
+                {
+                    logger.LogInformation(
+                        "Skipping EventSub subscription channel.chat.message for {Streamer} because streamer OAuth token is not configured. " +
+                        "A streamer token with user:read:chat is required.",
+                        streamer.DisplayName);
+                }
+                else
+                {
+                    var chatAuth = new TwitchAuthContext(
+                        chatClientId,
+                        streamer.TwitchStreamerAccessToken,
+                        streamer.TwitchBotUserId,
+                        streamer.TwitchUserId);
+
+                    var chatResult = await EnsureSubscriptionTypeAsync(
+                        streamer,
+                        chatAuth,
+                        options,
+                        "channel.chat.message",
+                        cancellationToken,
+                        extraCondition: ("user_id", streamer.TwitchUserId));
+
+                    ensuredCount += chatResult.EnsuredCount;
+                    alreadyExistsCount += chatResult.AlreadyExistsCount;
+                    failedCount += chatResult.FailedCount;
+                }
             }
 
             await TryPrefillSubscriberSnapshotAsync(streamer, options, cancellationToken);
