@@ -1,18 +1,32 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
 using System.Text.Json;
 using TwitchTools.Web.Models;
+using TwitchTools.Web.Options;
 
 namespace TwitchTools.Web.Controllers;
 
 [Authorize]
 public sealed class OidcDebugController : Controller
 {
+    private readonly IOptions<FeatureFlagsOptions> _featureFlags;
+
+    public OidcDebugController(IOptions<FeatureFlagsOptions> featureFlags)
+    {
+        _featureFlags = featureFlags;
+    }
+
     [HttpGet("/oidc-debug")]
     public async Task<IActionResult> Index()
     {
+        if (!_featureFlags.Value.EnableOidcDebug)
+        {
+            return NotFound();
+        }
+
         var principal = User;
         var identity = principal.Identity as ClaimsIdentity;
 
