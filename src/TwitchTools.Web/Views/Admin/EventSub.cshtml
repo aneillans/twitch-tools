@@ -1,0 +1,84 @@
+@model TwitchTools.Web.Services.EventSubDiagnosticsResult
+@{
+    ViewData["Title"] = "EventSub Diagnostics";
+}
+
+<h1>EventSub Diagnostics</h1>
+
+@if (!string.IsNullOrWhiteSpace(ViewData["StatusMessage"] as string))
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @ViewData["StatusMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+@if (!Model.IsConfigured)
+{
+    <div class="alert alert-warning">Twitch credentials are not configured — cannot query EventSub subscriptions.</div>
+}
+else if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="alert alert-danger">@Model.ErrorMessage</div>
+}
+else
+{
+    <p class="text-muted">
+        <strong>@Model.Subscriptions.Count</strong> subscription(s) registered &mdash;
+        Cost: <strong>@Model.TotalCost</strong> / @Model.MaxTotalCost
+    </p>
+}
+
+<div class="mb-3 d-flex gap-2">
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">&larr; Admin</a>
+    <form method="post" asp-action="EventSubForceResync">
+        <button type="submit" class="btn btn-warning btn-sm"
+                onclick="return confirm('This will delete ALL EventSub subscriptions and re-bootstrap. Continue?')">
+            Force Delete &amp; Resync All
+        </button>
+    </form>
+</div>
+
+@if (Model.Subscriptions.Count > 0)
+{
+    <table class="table table-striped table-sm">
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Version</th>
+                <th>Status</th>
+                <th>Condition</th>
+                <th>Created (UTC)</th>
+                <th>ID</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var sub in Model.Subscriptions.OrderBy(s => s.Type))
+            {
+                var badgeClass = sub.Status switch
+                {
+                    "enabled" => "bg-success",
+                    "webhook_callback_verification_pending" => "bg-warning text-dark",
+                    _ => "bg-danger"
+                };
+                <tr>
+                    <td><code>@sub.Type</code></td>
+                    <td>@sub.Version</td>
+                    <td><span class="badge @badgeClass">@sub.Status</span></td>
+                    <td>
+                        @foreach (var kv in sub.Condition)
+                        {
+                            <span class="d-block"><small><strong>@kv.Key</strong>: @kv.Value</small></span>
+                        }
+                    </td>
+                    <td><small>@sub.CreatedAt.ToString("yyyy-MM-dd HH:mm")</small></td>
+                    <td><small class="text-muted font-monospace">@sub.Id</small></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else if (Model.IsConfigured && string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <p class="text-muted">No subscriptions found. Run the bootstrap to create them.</p>
+}

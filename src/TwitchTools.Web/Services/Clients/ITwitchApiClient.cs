@@ -9,6 +9,8 @@ public interface ITwitchApiClient
         TwitchAuthContext authContext,
         TwitchEventSubSubscriptionRequest request,
         CancellationToken cancellationToken);
+    Task<TwitchEventSubListResult> GetEventSubSubscriptionsAsync(TwitchAuthContext authContext, CancellationToken cancellationToken);
+    Task<bool> DeleteEventSubSubscriptionAsync(string subscriptionId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<TwitchStreamStatus> GetStreamStatusAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<bool> IsStreamerLiveAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<string>> GetCurrentChattersAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
@@ -44,6 +46,21 @@ public sealed record TwitchEventSubCreateResult(
     bool IsAlreadyExists,
     int StatusCode,
     string? ErrorMessage);
+
+public sealed record TwitchEventSubListResult(
+    bool IsSuccess,
+    IReadOnlyList<TwitchEventSubSubscriptionInfo> Subscriptions,
+    int TotalCost,
+    int MaxTotalCost,
+    string? ErrorMessage);
+
+public sealed record TwitchEventSubSubscriptionInfo(
+    string Id,
+    string Status,
+    string Type,
+    string Version,
+    IReadOnlyDictionary<string, string> Condition,
+    DateTime CreatedAt);
 
 public sealed record TwitchAppAccessTokenResult(
     bool IsSuccess,

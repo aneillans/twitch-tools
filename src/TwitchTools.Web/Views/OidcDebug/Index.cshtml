@@ -1,0 +1,167 @@
+@model OidcDebugViewModel
+@{
+    ViewData["Title"] = "OIDC Debug";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">OIDC Debug</h1>
+    <a class="btn btn-outline-secondary" asp-controller="Dashboard" asp-action="Index">Back to Dashboard</a>
+</div>
+
+<p class="text-muted">
+    Use this page to inspect Keycloak role values from the access token and the role claims attached to your current ASP.NET Core user principal.
+</p>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="h5">Session</h2>
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Authenticated</dt>
+                    <dd class="col-sm-7">@(Model.IsAuthenticated ? "Yes" : "No")</dd>
+
+                    <dt class="col-sm-5">User</dt>
+                    <dd class="col-sm-7">@Model.UserName</dd>
+
+                    <dt class="col-sm-5">Authentication Type</dt>
+                    <dd class="col-sm-7">@Model.AuthenticationType</dd>
+
+                    <dt class="col-sm-5">Identity RoleClaimType</dt>
+                    <dd class="col-sm-7">@Model.RoleClaimType</dd>
+
+                    <dt class="col-sm-5">IsInRole("admin")</dt>
+                    <dd class="col-sm-7">
+                        @if (Model.IsAdmin)
+                        {
+                            <span class="badge bg-success">true</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-danger">false</span>
+                        }
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="h5">Mapped Role Claims</h2>
+
+                <h3 class="h6 mt-3">Claim type: roles</h3>
+                @if (Model.MappedRolesClaims.Count == 0)
+                {
+                    <p class="text-muted mb-2">No roles claims found.</p>
+                }
+                else
+                {
+                    <ul class="mb-2">
+                        @foreach (var role in Model.MappedRolesClaims)
+                        {
+                            <li><code>@role</code></li>
+                        }
+                    </ul>
+                }
+
+                <h3 class="h6 mt-3">Claim type: @System.Security.Claims.ClaimTypes.Role</h3>
+                @if (Model.MappedClaimTypeRoleClaims.Count == 0)
+                {
+                    <p class="text-muted mb-0">No ClaimTypes.Role values found.</p>
+                }
+                else
+                {
+                    <ul class="mb-0">
+                        @foreach (var role in Model.MappedClaimTypeRoleClaims)
+                        {
+                            <li><code>@role</code></li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">Detected Keycloak Roles from Access Token</h2>
+
+        @if (!string.IsNullOrWhiteSpace(Model.AccessTokenRoleParseError))
+        {
+            <div class="alert alert-warning" role="alert">
+                @Model.AccessTokenRoleParseError
+            </div>
+        }
+
+        <h3 class="h6 mt-3">realm_access.roles</h3>
+        @if (Model.DetectedRealmRoles.Count == 0)
+        {
+            <p class="text-muted">No realm roles detected in access token.</p>
+        }
+        else
+        {
+            <ul>
+                @foreach (var role in Model.DetectedRealmRoles)
+                {
+                    <li><code>@role</code></li>
+                }
+            </ul>
+        }
+
+        <h3 class="h6 mt-3">resource_access[client].roles</h3>
+        @if (Model.DetectedResourceRoles.Count == 0)
+        {
+            <p class="text-muted mb-0">No client resource roles detected in access token.</p>
+        }
+        else
+        {
+            @foreach (var clientRoleSet in Model.DetectedResourceRoles.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                <h4 class="h6 mt-3"><code>@clientRoleSet.Key</code></h4>
+                <ul>
+                    @foreach (var role in clientRoleSet.Value)
+                    {
+                        <li><code>@role</code></li>
+                    }
+                </ul>
+            }
+        }
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h2 class="h5">All Current Claims</h2>
+        <div class="table-responsive">
+            <table class="table table-sm table-striped align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th scope="col">Type</th>
+                        <th scope="col">Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Claims.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="2" class="text-muted">No claims found.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var claim in Model.Claims)
+                        {
+                            <tr>
+                                <td><code>@claim.Type</code></td>
+                                <td><code>@claim.Value</code></td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

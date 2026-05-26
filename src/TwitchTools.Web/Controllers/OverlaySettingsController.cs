@@ -15,6 +15,7 @@ public sealed class OverlaySettingsController(
     AppDbContext dbContext,
     IOverlayService overlayService,
     IOverlayEventBroker overlayEventBroker,
+    ITwitchEventSubService twitchEventSubService,
     ILogger<OverlaySettingsController> logger) : Controller
 {
     [HttpGet("/my-tools/overlay")]
@@ -100,6 +101,9 @@ public sealed class OverlaySettingsController(
         {
             await overlayService.SaveCustomWidgetAsync(ownerSubject, input, cancellationToken);
             logger.LogInformation("Custom widget save completed for owner {OwnerSubject}", ownerSubject);
+
+            await twitchEventSubService.EnsureSubscriberSubscriptionsAsync(cancellationToken);
+
             TempData["StatusMessage"] = "Custom StreamElements widget saved.";
             return RedirectToAction(nameof(Index));
         }
