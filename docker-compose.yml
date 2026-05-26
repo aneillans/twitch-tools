@@ -53,6 +53,7 @@ services:
       Keycloak__RequireHttpsMetadata: "false"
       Twitch__DefaultClientId: ${TWITCH_CLIENT_ID:-}
       Twitch__OAuthClientSecret: ${TWITCH_CLIENT_SECRET:-}
+      Twitch__EventSubSecret: ${TWITCH_EVENTSUB_SECRET:-replace-with-long-random-value}
       Twitch__OAuthRedirectUri: http://localhost:8080/my-tools/connect/twitch/callback
       Discord__BotClientId: ${DISCORD_BOT_CLIENT_ID:-}
       Encryption__Salt: ${ENCRYPTION_SALT:-replace-with-long-random-value}

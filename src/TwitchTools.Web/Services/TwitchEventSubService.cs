@@ -113,12 +113,6 @@ public sealed class TwitchEventSubService(
 
     private async Task<EventSubEnsureSummary> EnsureSubscriberSubscriptionsCoreAsync(CancellationToken cancellationToken)
     {
-        if (featureFlags.Value.DisableExternalPosting)
-        {
-            logger.LogInformation("Skipping EventSub subscription bootstrap because FeatureFlags:DisableExternalPosting is enabled.");
-            return new EventSubEnsureSummary(0, 0, 0, "FeatureFlags:DisableExternalPosting is enabled.");
-        }
-
         var options = twitchOptions.Value;
         if (string.IsNullOrWhiteSpace(options.DefaultClientId)
             || string.IsNullOrWhiteSpace(options.OAuthClientSecret)
