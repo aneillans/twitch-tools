@@ -38,8 +38,10 @@ public sealed class AdminController(AppDbContext dbContext, ITwitchEventSubServi
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> EventSubForceResync(CancellationToken cancellationToken)
     {
-        await twitchEventSubService.ForceResyncSubscriptionsAsync(cancellationToken);
-        TempData["StatusMessage"] = "Force resync completed — all subscriptions deleted and re-bootstrapped.";
+        var result = await twitchEventSubService.ForceResyncSubscriptionsAsync(cancellationToken);
+        TempData["StatusMessage"] = string.IsNullOrWhiteSpace(result.Message)
+            ? $"Force resync completed. Deleted {result.DeletedCount}, created {result.EnsuredCount}, already existed {result.AlreadyExistsCount}, failed {result.FailedCount}."
+            : $"Force resync completed with warnings. Deleted {result.DeletedCount}, created {result.EnsuredCount}, already existed {result.AlreadyExistsCount}, failed {result.FailedCount}. {result.Message}";
         return RedirectToAction(nameof(EventSub));
     }
 }
