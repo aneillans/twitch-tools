@@ -24,7 +24,8 @@ public sealed class EventSubController(
         var messageSignature = Request.Headers["Twitch-Eventsub-Message-Signature"].ToString();
 
         logger.LogInformation(
-            "Received Twitch EventSub callback. MessageType={MessageType}, MessageId={MessageId}, HasSignature={HasSignature}, ContentLength={ContentLength}",
+            "Received Twitch EventSub callback. Path={Path}, MessageType={MessageType}, MessageId={MessageId}, HasSignature={HasSignature}, ContentLength={ContentLength}",
+            Request.Path.Value,
             messageType,
             messageId,
             !string.IsNullOrWhiteSpace(messageSignature),
@@ -39,7 +40,8 @@ public sealed class EventSubController(
             cancellationToken);
 
         logger.LogInformation(
-            "Processed Twitch EventSub callback. MessageType={MessageType}, MessageId={MessageId}, StatusCode={StatusCode}",
+            "Processed Twitch EventSub callback. Path={Path}, MessageType={MessageType}, MessageId={MessageId}, StatusCode={StatusCode}",
+            Request.Path.Value,
             messageType,
             messageId,
             result.StatusCode);
