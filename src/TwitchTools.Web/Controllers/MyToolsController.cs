@@ -26,6 +26,10 @@ public sealed class MyToolsController(
     IBlueSkyApiClient blueSkyApiClient,
     ILogger<MyToolsController> logger) : Controller
 {
+    private static readonly string[] ChannelSubscriptionRequiredScopes = ["channel:read:subscriptions"];
+    private static readonly string[] ChatUserRequiredScopes = ["user:read:chat", "user:bot"];
+    private static readonly string[] ChatBroadcasterRequiredScopes = ["channel:bot"];
+
     private const string TwitchOAuthStateCookie = "twitch_oauth_state";
     private const string TwitchOAuthModeCookie = "twitch_oauth_mode";
     private const string DefaultBlueSkyStartedTemplate = "{streamer} is now live on Twitch.";
@@ -57,6 +61,7 @@ public sealed class MyToolsController(
         var model = new MyToolsViewModel
         {
             HasProfile = true,
+            TwitchGrantWarnings = await BuildTwitchGrantWarningsAsync(streamer, cancellationToken),
             Twitch = new TwitchConnectionInput
             {
                 DisplayName = streamer.DisplayName,
@@ -603,6 +608,109 @@ public sealed class MyToolsController(
                 : $"Valid for Twitch user {result.Login} ({result.UserId}).",
             TextClass = "text-success"
         };
+    }
+
+    private async Task<IReadOnlyCollection<string>> BuildTwitchGrantWarningsAsync(Streamer streamer, CancellationToken cancellationToken)
+    {
+        var options = twitchOptions.Value;
+        if (string.IsNullOrWhiteSpace(options.DefaultClientId) || string.IsNullOrWhiteSpace(options.OAuthClientSecret))
+        {
+            return [];
+        }
+
+        if (string.IsNullOrWhiteSpace(streamer.TwitchUserId))
+        {
+            return [];
+        }
+
+        var appToken = await twitchApiClient.GetAppAccessTokenAsync(
+            options.DefaultClientId,
+            options.OAuthClientSecret,
+            cancellationToken);
+        if (!appToken.IsSuccess || string.IsNullOrWhiteSpace(appToken.AccessToken))
+        {
+            return ["Could not validate Twitch grants right now because the server app token request failed."];
+        }
+
+        var userIds = new[] { streamer.TwitchUserId, streamer.TwitchBotUserId }
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        var lookupResult = await twitchApiClient.GetAuthorizationsByUserIdsAsync(
+            userIds,
+            new TwitchAuthContext(options.DefaultClientId, appToken.AccessToken, null, null),
+            cancellationToken);
+        if (!lookupResult.IsSuccess)
+        {
+            return ["Could not validate Twitch grants right now because the Twitch authorization lookup failed."];
+        }
+
+        var warnings = new List<string>();
+
+        AddScopeWarning(
+            warnings,
+            streamer.TwitchUserId,
+            "Subscriber events",
+            ChannelSubscriptionRequiredScopes,
+            lookupResult.Authorizations,
+            "Reconnect your streamer Twitch account to grant channel:read:subscriptions.");
+
+        var chatUserId = string.IsNullOrWhiteSpace(streamer.TwitchBotUserId)
+            ? streamer.TwitchUserId
+            : streamer.TwitchBotUserId;
+
+        AddScopeWarning(
+            warnings,
+            chatUserId,
+            "Chat message events (chat sender grants)",
+            ChatUserRequiredScopes,
+            lookupResult.Authorizations,
+            string.IsNullOrWhiteSpace(streamer.TwitchBotUserId)
+                ? "Reconnect your streamer Twitch account to grant user:read:chat and user:bot."
+                : "Reconnect your bot Twitch account to grant user:read:chat and user:bot.");
+
+        AddScopeWarning(
+            warnings,
+            streamer.TwitchUserId,
+            "Chat message events (broadcaster grant)",
+            ChatBroadcasterRequiredScopes,
+            lookupResult.Authorizations,
+            "Reconnect your streamer Twitch account to grant channel:bot.");
+
+        return warnings;
+    }
+
+    private static void AddScopeWarning(
+        ICollection<string> warnings,
+        string? userId,
+        string context,
+        IReadOnlyCollection<string> requiredScopes,
+        IReadOnlyDictionary<string, TwitchUserAuthorization> authorizations,
+        string reconnectHelp)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            warnings.Add($"{context}: user id is missing.");
+            return;
+        }
+
+        if (!authorizations.TryGetValue(userId, out var authorization))
+        {
+            warnings.Add($"{context}: Twitch user {userId} has not granted this app yet. {reconnectHelp}");
+            return;
+        }
+
+        var scopes = authorization.Scopes.ToHashSet(StringComparer.Ordinal);
+        var missingScopes = requiredScopes.Where(scope => !scopes.Contains(scope)).ToArray();
+        if (missingScopes.Length == 0)
+        {
+            return;
+        }
+
+        var userName = authorization.UserName ?? authorization.UserLogin ?? userId;
+        warnings.Add($"{context}: {userName} ({userId}) is missing {string.Join(", ", missingScopes)}. {reconnectHelp}");
     }
 
     private static string? BuildDiscordInviteUrl(DiscordOptions options)

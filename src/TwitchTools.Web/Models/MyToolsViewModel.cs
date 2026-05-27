@@ -3,6 +3,7 @@ namespace TwitchTools.Web.Models;
 public sealed class MyToolsViewModel
 {
     public bool HasProfile { get; init; }
+    public IReadOnlyCollection<string> TwitchGrantWarnings { get; init; } = [];
     public TwitchConnectionInput Twitch { get; init; } = new();
     public BlueSkyConnectionInput BlueSky { get; init; } = new();
 }

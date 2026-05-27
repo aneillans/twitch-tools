@@ -418,6 +418,82 @@ public sealed class TwitchApiClient(
         return new TwitchSubscriberEvent(item.UserId, item.UserLogin, item.UserName);
     }
 
+    public async Task<TwitchAuthorizationLookupResult> GetAuthorizationsByUserIdsAsync(
+        IReadOnlyCollection<string> userIds,
+        TwitchAuthContext authContext,
+        CancellationToken cancellationToken)
+    {
+        if (userIds.Count == 0)
+        {
+            return new TwitchAuthorizationLookupResult(
+                true,
+                new Dictionary<string, TwitchUserAuthorization>(StringComparer.Ordinal),
+                null);
+        }
+
+        var distinctIds = userIds
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (distinctIds.Length == 0)
+        {
+            return new TwitchAuthorizationLookupResult(
+                true,
+                new Dictionary<string, TwitchUserAuthorization>(StringComparer.Ordinal),
+                null);
+        }
+
+        // Twitch limits authorization/users lookups to 10 user_id values per request.
+        var results = new Dictionary<string, TwitchUserAuthorization>(StringComparer.Ordinal);
+        foreach (var batch in distinctIds.Chunk(10))
+        {
+            var query = string.Join("&", batch.Select(x => $"user_id={Uri.EscapeDataString(x)}"));
+            using var request = CreateRequest(HttpMethod.Get, $"helix/authorization/users?{query}", authContext);
+
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                logger.LogWarning(
+                    "Twitch authorization lookup failed: {StatusCode}. Response: {ResponseBody}",
+                    response.StatusCode,
+                    errorBody);
+                return new TwitchAuthorizationLookupResult(
+                    false,
+                    new Dictionary<string, TwitchUserAuthorization>(StringComparer.Ordinal),
+                    errorBody);
+            }
+
+            await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var payload = await JsonSerializer.DeserializeAsync<HelixDataEnvelope<TwitchAuthorizationUserItem>>(
+                contentStream,
+                TwitchJsonOptions,
+                cancellationToken: cancellationToken);
+
+            foreach (var item in payload?.Data ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(item.UserId))
+                {
+                    continue;
+                }
+
+                var scopes = (item.Scopes ?? [])
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+
+                results[item.UserId] = new TwitchUserAuthorization(
+                    item.UserId,
+                    item.UserLogin,
+                    item.UserName,
+                    scopes);
+            }
+        }
+
+        return new TwitchAuthorizationLookupResult(true, results, null);
+    }
+
     public async Task<IReadOnlyDictionary<string, TwitchUserProfile>> GetUsersByIdsAsync(
         IReadOnlyCollection<string> userIds,
         TwitchAuthContext authContext,
@@ -651,5 +727,20 @@ public sealed class TwitchApiClient(
 
         [JsonPropertyName("display_name")]
         public string? DisplayName { get; init; }
+    }
+
+    private sealed class TwitchAuthorizationUserItem
+    {
+        [JsonPropertyName("user_id")]
+        public string UserId { get; init; } = string.Empty;
+
+        [JsonPropertyName("user_login")]
+        public string? UserLogin { get; init; }
+
+        [JsonPropertyName("user_name")]
+        public string? UserName { get; init; }
+
+        [JsonPropertyName("scopes")]
+        public List<string>? Scopes { get; init; }
     }
 }

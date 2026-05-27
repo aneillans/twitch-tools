@@ -30,6 +30,7 @@ public sealed record EventSubDiagnosticsResult(
     IReadOnlyList<EventSubSubscriptionStatus> Subscriptions,
     int TotalCost,
     int MaxTotalCost,
+    IReadOnlyList<string> GrantWarnings,
     string? ErrorMessage);
 
 public sealed record EventSubForceResyncResult(
