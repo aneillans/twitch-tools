@@ -59,6 +59,7 @@ services:
       Discord__BotClientId: ${DISCORD_BOT_CLIENT_ID:-}
       Encryption__Salt: ${ENCRYPTION_SALT:-replace-with-long-random-value}
       FeatureFlags__DisableExternalPosting: ${FEATURE_DISABLE_EXTERNAL_POSTING:-false}
+      FeatureFlags__EnableEventSubIngressLogging: ${FEATURE_ENABLE_EVENTSUB_INGRESS_LOGGING:-false}
     ports:
       - "8080:8080"
     depends_on:
