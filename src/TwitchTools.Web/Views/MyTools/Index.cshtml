@@ -11,6 +11,20 @@
     <div class="alert alert-info">@statusMessage</div>
 }
 
+@if (Model.TwitchGrantWarnings.Count > 0)
+{
+    <div class="alert alert-warning" role="alert">
+        <h5 class="alert-heading mb-2">Twitch Grant Warnings</h5>
+        <p class="mb-2">Some required Twitch grants are missing for EventSub. Reconnect the listed account(s) using the buttons below.</p>
+        <ul class="mb-0">
+            @foreach (var warning in Model.TwitchGrantWarnings)
+            {
+                <li>@warning</li>
+            }
+        </ul>
+    </div>
+}
+
 <div class="card mb-4">
     <div class="card-header">OBS Overlay URLs</div>
     <div class="card-body">

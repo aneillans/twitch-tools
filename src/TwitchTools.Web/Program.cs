@@ -171,13 +171,54 @@ var storageImpl = exceptionlessConfig.Resolver.Resolve(typeof(Exceptionless.Stor
 startupLogger.LogInformation("Exceptionless Storage implementation: {StorageType}", storageImpl?.GetType().FullName ?? "<unknown>");
 startupLogger.LogInformation("Exceptionless local storage path: {Path}", exceptionlessStoragePath);
 
+var configuredTwitchOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<TwitchOptions>>().Value;
+startupLogger.LogInformation("Configured Twitch EventSub callback URL: {EventSubCallbackUrl}", configuredTwitchOptions.EventSubCallbackUrl);
+var configuredFeatureFlags = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<FeatureFlagsOptions>>().Value;
+startupLogger.LogInformation("Feature flag EnableEventSubIngressLogging: {Enabled}", configuredFeatureFlags.EnableEventSubIngressLogging);
+
 if (!Directory.Exists(exceptionlessStoragePath))
 {
     startupLogger.LogWarning("Exceptionless local storage directory does not exist after initialization: {Path}", exceptionlessStoragePath);
 }
 
 app.UseForwardedHeaders();
-app.UseHttpsRedirection();
+
+if (configuredFeatureFlags.EnableEventSubIngressLogging)
+{
+    var eventSubIngressLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("EventSubIngress");
+    app.Use(async (context, next) =>
+    {
+        var isEventSubCandidatePath = context.Request.Path.StartsWithSegments("/eventsub", StringComparison.OrdinalIgnoreCase)
+            || context.Request.Path.StartsWithSegments("/my-tools/connect/twitch/eventsub/callback", StringComparison.OrdinalIgnoreCase);
+
+        if (isEventSubCandidatePath)
+        {
+            eventSubIngressLogger.LogInformation(
+                "EventSub ingress candidate request received. Method={Method}, Path={Path}, Scheme={Scheme}, Host={Host}, X-Forwarded-Proto={ForwardedProto}, X-Forwarded-Host={ForwardedHost}",
+                context.Request.Method,
+                context.Request.Path.Value,
+                context.Request.Scheme,
+                context.Request.Host.Value,
+                context.Request.Headers["X-Forwarded-Proto"].ToString(),
+                context.Request.Headers["X-Forwarded-Host"].ToString());
+        }
+
+        await next();
+
+        if (isEventSubCandidatePath)
+        {
+            eventSubIngressLogger.LogInformation(
+                "EventSub ingress candidate request completed. Method={Method}, Path={Path}, StatusCode={StatusCode}",
+                context.Request.Method,
+                context.Request.Path.Value,
+                context.Response.StatusCode);
+        }
+    });
+}
+
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/eventsub/twitch", StringComparison.OrdinalIgnoreCase),
+    branch => branch.UseHttpsRedirection());
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();

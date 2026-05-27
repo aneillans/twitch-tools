@@ -53,10 +53,13 @@ services:
       Keycloak__RequireHttpsMetadata: "false"
       Twitch__DefaultClientId: ${TWITCH_CLIENT_ID:-}
       Twitch__OAuthClientSecret: ${TWITCH_CLIENT_SECRET:-}
+      Twitch__EventSubSecret: ${TWITCH_EVENTSUB_SECRET:-replace-with-long-random-value}
       Twitch__OAuthRedirectUri: http://localhost:8080/my-tools/connect/twitch/callback
+      Twitch__EventSubCallbackUrl: http://localhost:8080/my-tools/connect/twitch/eventsub/callback
       Discord__BotClientId: ${DISCORD_BOT_CLIENT_ID:-}
       Encryption__Salt: ${ENCRYPTION_SALT:-replace-with-long-random-value}
       FeatureFlags__DisableExternalPosting: ${FEATURE_DISABLE_EXTERNAL_POSTING:-false}
+      FeatureFlags__EnableEventSubIngressLogging: ${FEATURE_ENABLE_EVENTSUB_INGRESS_LOGGING:-false}
     ports:
       - "8080:8080"
     depends_on:

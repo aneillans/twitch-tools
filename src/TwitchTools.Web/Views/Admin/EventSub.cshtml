@@ -29,6 +29,20 @@ else
     </p>
 }
 
+@if (Model.GrantWarnings.Count > 0)
+{
+    <div class="alert alert-warning" role="alert">
+        <h5 class="alert-heading mb-2">Grant Warnings</h5>
+        <p class="mb-2">Some streamers are missing Twitch grants required for one or more EventSub subscription types.</p>
+        <ul class="mb-0">
+            @foreach (var warning in Model.GrantWarnings)
+            {
+                <li>@warning</li>
+            }
+        </ul>
+    </div>
+}
+
 <div class="mb-3 d-flex gap-2">
     <a asp-action="Index" class="btn btn-outline-secondary btn-sm">&larr; Admin</a>
     <form method="post" asp-action="EventSubForceResync">

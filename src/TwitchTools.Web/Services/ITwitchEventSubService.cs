@@ -12,7 +12,7 @@ public interface ITwitchEventSubService
 
     Task EnsureSubscriberSubscriptionsAsync(CancellationToken cancellationToken);
     Task<EventSubDiagnosticsResult> GetDiagnosticsAsync(CancellationToken cancellationToken);
-    Task ForceResyncSubscriptionsAsync(CancellationToken cancellationToken);
+    Task<EventSubForceResyncResult> ForceResyncSubscriptionsAsync(CancellationToken cancellationToken);
 }
 
 public sealed record EventSubWebhookResult(int StatusCode, string? Body = null, string? ContentType = null);
@@ -30,4 +30,12 @@ public sealed record EventSubDiagnosticsResult(
     IReadOnlyList<EventSubSubscriptionStatus> Subscriptions,
     int TotalCost,
     int MaxTotalCost,
+    IReadOnlyList<string> GrantWarnings,
     string? ErrorMessage);
+
+public sealed record EventSubForceResyncResult(
+    int DeletedCount,
+    int EnsuredCount,
+    int AlreadyExistsCount,
+    int FailedCount,
+    string? Message);

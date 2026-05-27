@@ -6,7 +6,9 @@ namespace TwitchTools.Web.Controllers;
 
 [AllowAnonymous]
 [Route("eventsub/twitch")]
-public sealed class EventSubController(ITwitchEventSubService twitchEventSubService) : Controller
+public sealed class EventSubController(
+    ITwitchEventSubService twitchEventSubService,
+    ILogger<EventSubController> logger) : Controller
 {
     [HttpPost]
     public async Task<IActionResult> Callback(CancellationToken cancellationToken)
@@ -21,6 +23,14 @@ public sealed class EventSubController(ITwitchEventSubService twitchEventSubServ
         var messageTimestamp = Request.Headers["Twitch-Eventsub-Message-Timestamp"].ToString();
         var messageSignature = Request.Headers["Twitch-Eventsub-Message-Signature"].ToString();
 
+        logger.LogInformation(
+            "Received Twitch EventSub callback. Path={Path}, MessageType={MessageType}, MessageId={MessageId}, HasSignature={HasSignature}, ContentLength={ContentLength}",
+            Request.Path.Value,
+            messageType,
+            messageId,
+            !string.IsNullOrWhiteSpace(messageSignature),
+            rawBody.Length);
+
         var result = await twitchEventSubService.HandleWebhookAsync(
             messageType,
             messageId,
@@ -28,6 +38,13 @@ public sealed class EventSubController(ITwitchEventSubService twitchEventSubServ
             messageSignature,
             rawBody,
             cancellationToken);
+
+        logger.LogInformation(
+            "Processed Twitch EventSub callback. Path={Path}, MessageType={MessageType}, MessageId={MessageId}, StatusCode={StatusCode}",
+            Request.Path.Value,
+            messageType,
+            messageId,
+            result.StatusCode);
 
         if (!string.IsNullOrWhiteSpace(result.Body))
         {

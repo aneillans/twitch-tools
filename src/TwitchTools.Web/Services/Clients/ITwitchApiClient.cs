@@ -18,6 +18,10 @@ public interface ITwitchApiClient
     Task<IReadOnlyCollection<TwitchScheduleSegment>> GetScheduleAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<TwitchFollowerEvent?> GetLatestFollowerAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<TwitchSubscriberEvent?> GetLatestSubscriberAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
+    Task<TwitchAuthorizationLookupResult> GetAuthorizationsByUserIdsAsync(
+        IReadOnlyCollection<string> userIds,
+        TwitchAuthContext authContext,
+        CancellationToken cancellationToken);
     Task<IReadOnlyDictionary<string, TwitchUserProfile>> GetUsersByIdsAsync(
         IReadOnlyCollection<string> userIds,
         TwitchAuthContext authContext,
@@ -96,6 +100,17 @@ public sealed record TwitchUserProfile(
     string UserId,
     string? UserLogin,
     string? DisplayName);
+
+public sealed record TwitchUserAuthorization(
+    string UserId,
+    string? UserLogin,
+    string? UserName,
+    IReadOnlyCollection<string> Scopes);
+
+public sealed record TwitchAuthorizationLookupResult(
+    bool IsSuccess,
+    IReadOnlyDictionary<string, TwitchUserAuthorization> Authorizations,
+    string? ErrorMessage);
 
 public sealed record TwitchTokenValidationResult(
     bool IsValid,

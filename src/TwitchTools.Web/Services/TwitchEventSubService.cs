@@ -18,10 +18,20 @@ public sealed class TwitchEventSubService(
     IOverlayEventBroker overlayEventBroker,
     ILogger<TwitchEventSubService> logger) : ITwitchEventSubService
 {
+    private const string ChannelSubscribeType = "channel.subscribe";
+    private const string ChannelSubscriptionMessageType = "channel.subscription.message";
+    private const string ChannelChatMessageType = "channel.chat.message";
+
+    private static readonly string[] ChannelSubscriptionRequiredScopes = ["channel:read:subscriptions"];
+    private static readonly string[] ChatUserRequiredScopes = ["user:read:chat", "user:bot"];
+    private static readonly string[] ChatBroadcasterRequiredScopes = ["channel:bot"];
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
+
+    private sealed record EventSubEnsureSummary(int EnsuredCount, int AlreadyExistsCount, int FailedCount, string? Message);
 
     public async Task<EventSubWebhookResult> HandleWebhookAsync(
         string messageType,
@@ -106,27 +116,30 @@ public sealed class TwitchEventSubService(
 
     public async Task EnsureSubscriberSubscriptionsAsync(CancellationToken cancellationToken)
     {
-        if (featureFlags.Value.DisableExternalPosting)
-        {
-            logger.LogInformation("Skipping EventSub subscription bootstrap because FeatureFlags:DisableExternalPosting is enabled.");
-            return;
-        }
+        await EnsureSubscriberSubscriptionsCoreAsync(cancellationToken);
+    }
 
+    private async Task<EventSubEnsureSummary> EnsureSubscriberSubscriptionsCoreAsync(CancellationToken cancellationToken)
+    {
         var options = twitchOptions.Value;
         if (string.IsNullOrWhiteSpace(options.DefaultClientId)
             || string.IsNullOrWhiteSpace(options.OAuthClientSecret)
             || string.IsNullOrWhiteSpace(options.EventSubCallbackUrl)
             || string.IsNullOrWhiteSpace(options.EventSubSecret))
         {
-            logger.LogDebug("Skipping EventSub subscription bootstrap because Twitch EventSub is not fully configured.");
-            return;
+            logger.LogWarning("Skipping EventSub subscription bootstrap because Twitch EventSub is not fully configured. DefaultClientIdConfigured={HasClientId}, OAuthClientSecretConfigured={HasClientSecret}, EventSubCallbackUrlConfigured={HasCallback}, EventSubSecretConfigured={HasSecret}",
+                !string.IsNullOrWhiteSpace(options.DefaultClientId),
+                !string.IsNullOrWhiteSpace(options.OAuthClientSecret),
+                !string.IsNullOrWhiteSpace(options.EventSubCallbackUrl),
+                !string.IsNullOrWhiteSpace(options.EventSubSecret));
+            return new EventSubEnsureSummary(0, 0, 0, "Twitch EventSub is not fully configured.");
         }
 
         var callbackUri = new Uri(options.EventSubCallbackUrl, UriKind.Absolute);
         if (!string.Equals(callbackUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
             logger.LogWarning("Skipping EventSub subscription bootstrap because callback URL is not HTTPS: {CallbackUrl}", options.EventSubCallbackUrl);
-            return;
+            return new EventSubEnsureSummary(0, 0, 0, "EventSub callback URL must use HTTPS.");
         }
 
         var appToken = await twitchApiClient.GetAppAccessTokenAsync(
@@ -137,43 +150,128 @@ public sealed class TwitchEventSubService(
         if (!appToken.IsSuccess || string.IsNullOrWhiteSpace(appToken.AccessToken))
         {
             logger.LogWarning("Unable to obtain an app access token for EventSub subscription bootstrap. {ErrorMessage}", appToken.ErrorMessage);
-            return;
+            return new EventSubEnsureSummary(0, 0, 0, $"Unable to obtain an app access token: {appToken.ErrorMessage}");
         }
 
         var auth = new TwitchAuthContext(options.DefaultClientId, appToken.AccessToken, null, null);
         var streamers = await dbContext.Streamers
             .AsNoTracking()
-            .Where(x => !string.IsNullOrWhiteSpace(x.TwitchUserId) && !string.IsNullOrWhiteSpace(x.TwitchStreamerAccessToken))
+            .Where(x => !string.IsNullOrWhiteSpace(x.TwitchUserId))
             .ToListAsync(cancellationToken);
+
+        if (streamers.Count == 0)
+        {
+            logger.LogInformation("Skipping EventSub subscription bootstrap because no streamers have a TwitchUserId configured.");
+            return new EventSubEnsureSummary(0, 0, 0, "No streamers have a Twitch user id configured.");
+        }
+
+        var ensuredCount = 0;
+        var alreadyExistsCount = 0;
+        var failedCount = 0;
+
+        var authorizationLookup = await BuildAuthorizationLookupAsync(streamers, auth, cancellationToken);
+        if (!authorizationLookup.IsSuccess)
+        {
+            logger.LogWarning(
+                "Unable to preflight EventSub user grants; proceeding without grant checks. {ErrorMessage}",
+                authorizationLookup.ErrorMessage);
+        }
 
         foreach (var streamer in streamers)
         {
-            await EnsureSubscriptionTypeAsync(streamer, auth, options, "channel.subscribe", cancellationToken);
-            await EnsureSubscriptionTypeAsync(streamer, auth, options, "channel.subscription.message", cancellationToken);
+            var subscribeResult = await EnsureSubscriptionTypeAsync(
+                streamer,
+                auth,
+                options,
+                ChannelSubscribeType,
+                authorizationLookup,
+                cancellationToken);
+            ensuredCount += subscribeResult.EnsuredCount;
+            alreadyExistsCount += subscribeResult.AlreadyExistsCount;
+            failedCount += subscribeResult.FailedCount;
+
+            var resubResult = await EnsureSubscriptionTypeAsync(
+                streamer,
+                auth,
+                options,
+                ChannelSubscriptionMessageType,
+                authorizationLookup,
+                cancellationToken);
+            ensuredCount += resubResult.EnsuredCount;
+            alreadyExistsCount += resubResult.AlreadyExistsCount;
+            failedCount += resubResult.FailedCount;
 
             if (!string.IsNullOrWhiteSpace(streamer.CustomOverlayToken))
             {
-                await EnsureSubscriptionTypeAsync(
+                var chatUserId = string.IsNullOrWhiteSpace(streamer.TwitchBotUserId)
+                    ? streamer.TwitchUserId
+                    : streamer.TwitchBotUserId;
+
+                if (!string.Equals(chatUserId, streamer.TwitchUserId, StringComparison.Ordinal))
+                {
+                    logger.LogDebug(
+                        "Registering EventSub channel.chat.message for {Streamer} using bot user id {ChatUserId}.",
+                        streamer.DisplayName,
+                        chatUserId);
+                }
+
+                var chatResult = await EnsureSubscriptionTypeAsync(
                     streamer,
                     auth,
                     options,
-                    "channel.chat.message",
+                    ChannelChatMessageType,
+                    authorizationLookup,
                     cancellationToken,
-                    extraCondition: ("user_id", streamer.TwitchUserId));
+                    extraCondition: ("user_id", chatUserId));
+
+                ensuredCount += chatResult.EnsuredCount;
+                alreadyExistsCount += chatResult.AlreadyExistsCount;
+                failedCount += chatResult.FailedCount;
+            }
+            else
+            {
+                logger.LogDebug(
+                    "Skipping EventSub subscription channel.chat.message for {Streamer} because CustomOverlayToken is not configured.",
+                    streamer.DisplayName);
             }
 
             await TryPrefillSubscriberSnapshotAsync(streamer, options, cancellationToken);
         }
+
+        logger.LogInformation(
+            "EventSub subscription bootstrap completed. Streamers={StreamerCount}, Ensured={EnsuredCount}, AlreadyExists={AlreadyExistsCount}, Failed={FailedCount}",
+            streamers.Count,
+            ensuredCount,
+            alreadyExistsCount,
+            failedCount);
+
+        return new EventSubEnsureSummary(ensuredCount, alreadyExistsCount, failedCount, null);
     }
 
-    private async Task EnsureSubscriptionTypeAsync(
+    private async Task<EventSubEnsureSummary> EnsureSubscriptionTypeAsync(
         Streamer streamer,
         TwitchAuthContext appAuth,
         TwitchOptions options,
         string eventSubType,
+        TwitchAuthorizationLookupResult authorizationLookup,
         CancellationToken cancellationToken,
         (string Key, string Value)? extraCondition = null)
     {
+        if (authorizationLookup.IsSuccess)
+        {
+            var preflightWarning = BuildPreflightGrantWarning(
+                streamer,
+                eventSubType,
+                extraCondition,
+                authorizationLookup.Authorizations);
+
+            if (!string.IsNullOrWhiteSpace(preflightWarning))
+            {
+                logger.LogWarning("Skipping EventSub subscription {EventSubType} for {Streamer}. {Warning}", eventSubType, streamer.DisplayName, preflightWarning);
+                return new EventSubEnsureSummary(0, 0, 1, preflightWarning);
+            }
+        }
+
         var condition = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["broadcaster_user_id"] = streamer.TwitchUserId
@@ -199,13 +297,13 @@ public sealed class TwitchEventSubService(
         if (result.IsSuccess)
         {
             logger.LogInformation("Ensured EventSub subscription {EventSubType} for {Streamer}.", eventSubType, streamer.DisplayName);
-            return;
+            return new EventSubEnsureSummary(1, 0, 0, null);
         }
 
         if (result.IsAlreadyExists)
         {
             logger.LogDebug("EventSub subscription {EventSubType} already exists for {Streamer}.", eventSubType, streamer.DisplayName);
-            return;
+            return new EventSubEnsureSummary(0, 1, 0, null);
         }
 
         logger.LogWarning(
@@ -214,6 +312,158 @@ public sealed class TwitchEventSubService(
             streamer.DisplayName,
             result.StatusCode,
             result.ErrorMessage);
+
+        return new EventSubEnsureSummary(0, 0, 1, result.ErrorMessage);
+    }
+
+    private async Task<TwitchAuthorizationLookupResult> BuildAuthorizationLookupAsync(
+        IReadOnlyCollection<Streamer> streamers,
+        TwitchAuthContext appAuth,
+        CancellationToken cancellationToken)
+    {
+        var userIds = streamers
+            .SelectMany(x => new[] { x.TwitchUserId, x.TwitchBotUserId })
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return await twitchApiClient.GetAuthorizationsByUserIdsAsync(userIds, appAuth, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<string>> BuildGrantWarningsAsync(
+        IReadOnlyCollection<Streamer> streamers,
+        TwitchAuthContext appAuth,
+        CancellationToken cancellationToken)
+    {
+        if (streamers.Count == 0)
+        {
+            return [];
+        }
+
+        var lookupResult = await BuildAuthorizationLookupAsync(streamers, appAuth, cancellationToken);
+        if (!lookupResult.IsSuccess)
+        {
+            return [
+                $"Unable to preflight user grants with Twitch API (/helix/authorization/users): {lookupResult.ErrorMessage}"
+            ];
+        }
+
+        var warnings = new List<string>();
+        foreach (var streamer in streamers)
+        {
+            var subscribeWarning = BuildPreflightGrantWarning(
+                streamer,
+                ChannelSubscribeType,
+                null,
+                lookupResult.Authorizations);
+            if (!string.IsNullOrWhiteSpace(subscribeWarning))
+            {
+                warnings.Add($"{streamer.DisplayName}: {subscribeWarning}");
+            }
+
+            var subscriptionMessageWarning = BuildPreflightGrantWarning(
+                streamer,
+                ChannelSubscriptionMessageType,
+                null,
+                lookupResult.Authorizations);
+            if (!string.IsNullOrWhiteSpace(subscriptionMessageWarning))
+            {
+                warnings.Add($"{streamer.DisplayName}: {subscriptionMessageWarning}");
+            }
+
+            if (string.IsNullOrWhiteSpace(streamer.CustomOverlayToken))
+            {
+                continue;
+            }
+
+            var chatUserId = string.IsNullOrWhiteSpace(streamer.TwitchBotUserId)
+                ? streamer.TwitchUserId
+                : streamer.TwitchBotUserId;
+
+            var chatWarning = BuildPreflightGrantWarning(
+                streamer,
+                ChannelChatMessageType,
+                ("user_id", chatUserId),
+                lookupResult.Authorizations);
+            if (!string.IsNullOrWhiteSpace(chatWarning))
+            {
+                warnings.Add($"{streamer.DisplayName}: {chatWarning}");
+            }
+        }
+
+        return warnings;
+    }
+
+    private static string? BuildPreflightGrantWarning(
+        Streamer streamer,
+        string eventSubType,
+        (string Key, string Value)? extraCondition,
+        IReadOnlyDictionary<string, TwitchUserAuthorization> authorizations)
+    {
+        if (eventSubType is ChannelSubscribeType or ChannelSubscriptionMessageType)
+        {
+            return BuildScopeWarning(
+                streamer.TwitchUserId,
+                $"{eventSubType} requires broadcaster grants",
+                ChannelSubscriptionRequiredScopes,
+                authorizations);
+        }
+
+        if (eventSubType == ChannelChatMessageType)
+        {
+            var chatUserId = extraCondition.HasValue && string.Equals(extraCondition.Value.Key, "user_id", StringComparison.Ordinal)
+                ? extraCondition.Value.Value
+                : streamer.TwitchUserId;
+
+            var chatterWarning = BuildScopeWarning(
+                chatUserId,
+                "channel.chat.message requires chat sender grants",
+                ChatUserRequiredScopes,
+                authorizations);
+            if (!string.IsNullOrWhiteSpace(chatterWarning))
+            {
+                return chatterWarning;
+            }
+
+            return BuildScopeWarning(
+                streamer.TwitchUserId,
+                "channel.chat.message requires broadcaster grant",
+                ChatBroadcasterRequiredScopes,
+                authorizations);
+        }
+
+        return null;
+    }
+
+    private static string? BuildScopeWarning(
+        string? userId,
+        string context,
+        IReadOnlyCollection<string> requiredScopes,
+        IReadOnlyDictionary<string, TwitchUserAuthorization> authorizations)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return $"{context}: user id is missing";
+        }
+
+        if (!authorizations.TryGetValue(userId, out var authorization))
+        {
+            return $"{context}: user {userId} has not granted this app yet";
+        }
+
+        var scopes = authorization.Scopes.ToHashSet(StringComparer.Ordinal);
+        var missingScopes = requiredScopes
+            .Where(scope => !scopes.Contains(scope))
+            .ToArray();
+
+        if (missingScopes.Length == 0)
+        {
+            return null;
+        }
+
+        var userName = authorization.UserName ?? authorization.UserLogin ?? userId;
+        return $"{context}: user {userName} ({userId}) is missing scope(s) {string.Join(", ", missingScopes)}";
     }
 
     private async Task TryPrefillSubscriberSnapshotAsync(Streamer streamer, TwitchOptions options, CancellationToken cancellationToken)
@@ -465,58 +715,92 @@ public sealed class TwitchEventSubService(
         var options = twitchOptions.Value;
         if (string.IsNullOrWhiteSpace(options.DefaultClientId) || string.IsNullOrWhiteSpace(options.OAuthClientSecret))
         {
-            return new EventSubDiagnosticsResult(false, [], 0, 0, "Twitch credentials are not configured.");
+            return new EventSubDiagnosticsResult(false, [], 0, 0, [], "Twitch credentials are not configured.");
         }
 
         var appToken = await twitchApiClient.GetAppAccessTokenAsync(options.DefaultClientId, options.OAuthClientSecret, cancellationToken);
         if (!appToken.IsSuccess || string.IsNullOrWhiteSpace(appToken.AccessToken))
         {
-            return new EventSubDiagnosticsResult(true, [], 0, 0, $"Failed to obtain app access token: {appToken.ErrorMessage}");
+            return new EventSubDiagnosticsResult(true, [], 0, 0, [], $"Failed to obtain app access token: {appToken.ErrorMessage}");
         }
 
         var auth = new TwitchAuthContext(options.DefaultClientId, appToken.AccessToken, null, null);
         var result = await twitchApiClient.GetEventSubSubscriptionsAsync(auth, cancellationToken);
         if (!result.IsSuccess)
         {
-            return new EventSubDiagnosticsResult(true, [], 0, 0, $"Failed to list EventSub subscriptions: {result.ErrorMessage}");
+            return new EventSubDiagnosticsResult(true, [], 0, 0, [], $"Failed to list EventSub subscriptions: {result.ErrorMessage}");
         }
+
+        var streamers = await dbContext.Streamers
+            .AsNoTracking()
+            .Where(x => !string.IsNullOrWhiteSpace(x.TwitchUserId))
+            .ToListAsync(cancellationToken);
+
+        var grantWarnings = await BuildGrantWarningsAsync(streamers, auth, cancellationToken);
 
         var statuses = result.Subscriptions
             .Select(s => new EventSubSubscriptionStatus(s.Id, s.Status, s.Type, s.Version, s.Condition, s.CreatedAt))
             .ToList();
 
-        return new EventSubDiagnosticsResult(true, statuses, result.TotalCost, result.MaxTotalCost, null);
+        return new EventSubDiagnosticsResult(true, statuses, result.TotalCost, result.MaxTotalCost, grantWarnings, null);
     }
 
-    public async Task ForceResyncSubscriptionsAsync(CancellationToken cancellationToken)
+    public async Task<EventSubForceResyncResult> ForceResyncSubscriptionsAsync(CancellationToken cancellationToken)
     {
         var options = twitchOptions.Value;
         if (string.IsNullOrWhiteSpace(options.DefaultClientId) || string.IsNullOrWhiteSpace(options.OAuthClientSecret))
         {
             logger.LogWarning("Cannot force resync EventSub subscriptions: credentials not configured.");
-            return;
+            return new EventSubForceResyncResult(0, 0, 0, 0, "Twitch credentials are not configured.");
         }
 
         var appToken = await twitchApiClient.GetAppAccessTokenAsync(options.DefaultClientId, options.OAuthClientSecret, cancellationToken);
         if (!appToken.IsSuccess || string.IsNullOrWhiteSpace(appToken.AccessToken))
         {
             logger.LogWarning("Cannot force resync EventSub subscriptions: failed to get app token. {ErrorMessage}", appToken.ErrorMessage);
-            return;
+            return new EventSubForceResyncResult(0, 0, 0, 0, $"Failed to obtain app access token: {appToken.ErrorMessage}");
         }
 
         var auth = new TwitchAuthContext(options.DefaultClientId, appToken.AccessToken, null, null);
+        var deletedCount = 0;
         var listResult = await twitchApiClient.GetEventSubSubscriptionsAsync(auth, cancellationToken);
         if (listResult.IsSuccess)
         {
             foreach (var sub in listResult.Subscriptions)
             {
-                await twitchApiClient.DeleteEventSubSubscriptionAsync(sub.Id, auth, cancellationToken);
-                logger.LogInformation("Deleted EventSub subscription {Id} ({Type}) during force resync.", sub.Id, sub.Type);
+                var deleted = await twitchApiClient.DeleteEventSubSubscriptionAsync(sub.Id, auth, cancellationToken);
+                if (deleted)
+                {
+                    deletedCount++;
+                    logger.LogInformation("Deleted EventSub subscription {Id} ({Type}) during force resync.", sub.Id, sub.Type);
+                }
+                else
+                {
+                    logger.LogWarning("Failed to delete EventSub subscription {Id} ({Type}) during force resync.", sub.Id, sub.Type);
+                }
             }
         }
+        else
+        {
+            logger.LogWarning("Unable to list EventSub subscriptions before force resync. {ErrorMessage}", listResult.ErrorMessage);
+        }
 
-        await EnsureSubscriberSubscriptionsAsync(cancellationToken);
-        logger.LogInformation("Force resync of EventSub subscriptions completed.");
+        var ensureSummary = await EnsureSubscriberSubscriptionsCoreAsync(cancellationToken);
+        var message = ensureSummary.Message;
+
+        logger.LogInformation(
+            "Force resync of EventSub subscriptions completed. Deleted={DeletedCount}, Ensured={EnsuredCount}, AlreadyExists={AlreadyExistsCount}, Failed={FailedCount}",
+            deletedCount,
+            ensureSummary.EnsuredCount,
+            ensureSummary.AlreadyExistsCount,
+            ensureSummary.FailedCount);
+
+        return new EventSubForceResyncResult(
+            deletedCount,
+            ensureSummary.EnsuredCount,
+            ensureSummary.AlreadyExistsCount,
+            ensureSummary.FailedCount,
+            message);
     }
 
     private static bool IsValidSignature(string secret, string messageId, string messageTimestamp, string rawBody, string messageSignature)
