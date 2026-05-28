@@ -126,7 +126,7 @@ builder.Services.AddScoped<ITwitchEventSubService, TwitchEventSubService>();
 builder.Services.AddScoped<IOverlayService, OverlayService>();
 builder.Services.AddSingleton<IOverlayEventBroker, OverlayEventBroker>();
 
-builder.Services.AddHostedService<LiveStatusBackgroundService>();
+builder.Services.AddHostedService<DiscordScheduleRefreshBackgroundService>();
 builder.Services.AddHostedService<TimedChatMessageBackgroundService>();
 builder.Services.AddHostedService<TwitchTokenRefreshBackgroundService>();
 builder.Services.AddHostedService<ViewerMonitoringBackgroundService>();
