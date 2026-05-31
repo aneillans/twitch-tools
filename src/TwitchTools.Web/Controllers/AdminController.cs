@@ -9,6 +9,7 @@ namespace TwitchTools.Web.Controllers;
 [Authorize(Policy = "AdminOnly")]
 public sealed class AdminController(AppDbContext dbContext, ITwitchEventSubService twitchEventSubService) : Controller
 {
+    [HttpGet]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var recentLiveEvents = await dbContext.LiveNotificationEvents

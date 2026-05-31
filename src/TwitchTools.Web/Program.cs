@@ -4,18 +4,23 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using System.Text.Json;
+using TwitchTools.Web;
 using TwitchTools.Web.Background;
 using TwitchTools.Web.Data;
 using TwitchTools.Web.Options;
 using TwitchTools.Web.Services;
 using TwitchTools.Web.Services.Clients;
 using TwitchTools.Web.Services.Security;
+using Neillans.TemplateKit.Auth;
+using Neillans.TemplateKit.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
+builder.Services.AddHttpContextAccessor();
 
 builder.Services.Configure<KeycloakOptions>(builder.Configuration.GetSection(KeycloakOptions.SectionName));
 builder.Services.Configure<TwitchOptions>(builder.Configuration.GetSection(TwitchOptions.SectionName));
@@ -34,68 +39,64 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
-builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
-    })
-    .AddCookie(options =>
-    {
-        options.AccessDeniedPath = "/account/access-denied";
-    })
-    .AddOpenIdConnect(options =>
-    {
-        var keycloak = builder.Configuration.GetSection(KeycloakOptions.SectionName).Get<KeycloakOptions>()
-            ?? throw new InvalidOperationException("Keycloak configuration is missing.");
+builder.Services.AddTemplateOidcAuthentication(builder.Configuration, options =>
+{
+    var keycloak = builder.Configuration.GetSection(KeycloakOptions.SectionName).Get<KeycloakOptions>()
+        ?? throw new InvalidOperationException("Keycloak configuration is missing.");
 
-        options.Authority = keycloak.Authority;
-        if (!string.IsNullOrWhiteSpace(keycloak.MetadataAddress))
+    options.Authority = keycloak.Authority;
+    if (!string.IsNullOrWhiteSpace(keycloak.MetadataAddress))
+    {
+        options.MetadataAddress = keycloak.MetadataAddress;
+    }
+
+    options.ClientId = keycloak.ClientId;
+    options.ClientSecret = keycloak.ClientSecret;
+    options.ResponseType = "code";
+    options.SaveTokens = true;
+    options.RequireHttpsMetadata = keycloak.RequireHttpsMetadata;
+    options.GetClaimsFromUserInfoEndpoint = true;
+    options.CallbackPath = keycloak.CallbackPath;
+
+    options.Scope.Clear();
+    options.Scope.Add("openid");
+    options.Scope.Add("profile");
+    options.Scope.Add("email");
+
+    options.TokenValidationParameters.RoleClaimType = "roles";
+
+    options.Events = new OpenIdConnectEvents
+    {
+        OnTokenValidated = context =>
         {
-            options.MetadataAddress = keycloak.MetadataAddress;
-        }
-
-        options.ClientId = keycloak.ClientId;
-        options.ClientSecret = keycloak.ClientSecret;
-        options.ResponseType = "code";
-        options.SaveTokens = true;
-        options.RequireHttpsMetadata = keycloak.RequireHttpsMetadata;
-        options.GetClaimsFromUserInfoEndpoint = true;
-        options.CallbackPath = keycloak.CallbackPath;
-
-        options.Scope.Clear();
-        options.Scope.Add("openid");
-        options.Scope.Add("profile");
-        options.Scope.Add("email");
-
-        options.TokenValidationParameters.RoleClaimType = "roles";
-
-        options.Events = new OpenIdConnectEvents
-        {
-            OnTokenValidated = context =>
+            if (context.Principal?.Identity is not ClaimsIdentity identity)
             {
-                if (context.Principal?.Identity is not ClaimsIdentity identity)
-                {
-                    return Task.CompletedTask;
-                }
-
-                AddRoleClaims(identity, "realm_access", "roles");
-                AddResourceRoleClaims(identity, context.Options.ClientId ?? string.Empty);
-                AddGroupClaimsAsRoles(identity, "groups");
-
-                // Keycloak commonly emits role claims in the access token; ensure they are available for policies.
-                AddRolesFromJwt(identity, context.TokenEndpointResponse?.AccessToken, context.Options.ClientId ?? string.Empty);
                 return Task.CompletedTask;
             }
-        };
-    });
+
+            AddRoleClaims(identity, "realm_access", "roles");
+            AddResourceRoleClaims(identity, context.Options.ClientId ?? string.Empty);
+            AddGroupClaimsAsRoles(identity, "groups");
+
+            // Keycloak commonly emits role claims in the access token; ensure they are available for policies.
+            AddRolesFromJwt(identity, context.TokenEndpointResponse?.AccessToken, context.Options.ClientId ?? string.Empty);
+            return Task.CompletedTask;
+        }
+    };
+});
 
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("admin"));
 });
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+// builder.Services.AddDbContext<AppDbContext>(options =>
+//     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddTemplateDbContext<AppDbContext>(builder.Configuration, options =>
+{
+    // Keep any project-specific EF options here (if needed).
+});
 
 builder.Services.AddExceptionless(builder.Configuration);
 builder.Services.AddSingleton<IDataEncryptionService, AesDataEncryptionService>();
@@ -162,23 +163,26 @@ exceptionlessConfig.UseFolderStorage(exceptionlessStoragePath);
 exceptionlessConfig.UseTraceLogger(Exceptionless.Logging.LogLevel.Trace);
 exceptionlessConfig.SetDefaultMinLogLevel(Exceptionless.Logging.LogLevel.Trace);
 
-startupLogger.LogInformation("Exceptionless ServerUrl: {ServerUrl}", exceptionlessConfig.ServerUrl);
-startupLogger.LogInformation("Exceptionless ApiKey configured: {HasKey}", !string.IsNullOrWhiteSpace(exceptionlessConfig.ApiKey));
-startupLogger.LogInformation("Exceptionless Enabled: {Enabled}", exceptionlessConfig.IsValid);
-startupLogger.LogInformation("Exceptionless QueueMaxAttempts: {QueueMaxAttempts}", exceptionlessConfig.QueueMaxAttempts);
-startupLogger.LogInformation("Exceptionless QueueMaxAge: {QueueMaxAge}", exceptionlessConfig.QueueMaxAge);
-var storageImpl = exceptionlessConfig.Resolver.Resolve(typeof(Exceptionless.Storage.IObjectStorage));
-startupLogger.LogInformation("Exceptionless Storage implementation: {StorageType}", storageImpl?.GetType().FullName ?? "<unknown>");
-startupLogger.LogInformation("Exceptionless local storage path: {Path}", exceptionlessStoragePath);
-
-var configuredTwitchOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<TwitchOptions>>().Value;
-startupLogger.LogInformation("Configured Twitch EventSub callback URL: {EventSubCallbackUrl}", configuredTwitchOptions.EventSubCallbackUrl);
 var configuredFeatureFlags = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<FeatureFlagsOptions>>().Value;
-startupLogger.LogInformation("Feature flag EnableEventSubIngressLogging: {Enabled}", configuredFeatureFlags.EnableEventSubIngressLogging);
+StartupLog.LogFeatureFlagEnableEventSubIngressLogging(startupLogger, configuredFeatureFlags.EnableEventSubIngressLogging);
+
+if (startupLogger.IsEnabled(LogLevel.Information))
+{
+    StartupLog.LogExceptionlessServerUrl(startupLogger, exceptionlessConfig.ServerUrl);
+    var exceptionlessApiKeyConfigured = !string.IsNullOrWhiteSpace(exceptionlessConfig.ApiKey);
+    StartupLog.LogExceptionlessApiKeyConfigured(startupLogger, exceptionlessApiKeyConfigured);
+    StartupLog.LogExceptionlessEnabled(startupLogger, exceptionlessConfig.IsValid);
+    var storageImpl = exceptionlessConfig.Resolver.Resolve(typeof(Exceptionless.Storage.IObjectStorage));
+    StartupLog.LogExceptionlessStorageImplementation(startupLogger, storageImpl?.GetType().FullName ?? "<unknown>");
+    StartupLog.LogExceptionlessLocalStoragePath(startupLogger, exceptionlessStoragePath);
+
+    var configuredTwitchOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<TwitchOptions>>().Value;
+    StartupLog.LogConfiguredTwitchEventSubCallbackUrl(startupLogger, configuredTwitchOptions.EventSubCallbackUrl);
+}
 
 if (!Directory.Exists(exceptionlessStoragePath))
 {
-    startupLogger.LogWarning("Exceptionless local storage directory does not exist after initialization: {Path}", exceptionlessStoragePath);
+    StartupLog.LogExceptionlessLocalStorageDirectoryMissing(startupLogger, exceptionlessStoragePath);
 }
 
 app.UseForwardedHeaders();
@@ -193,22 +197,25 @@ if (configuredFeatureFlags.EnableEventSubIngressLogging)
 
         if (isEventSubCandidatePath)
         {
-            eventSubIngressLogger.LogInformation(
-                "EventSub ingress candidate request received. Method={Method}, Path={Path}, Scheme={Scheme}, Host={Host}, X-Forwarded-Proto={ForwardedProto}, X-Forwarded-Host={ForwardedHost}",
+            var forwardedProto = context.Request.Headers["X-Forwarded-Proto"].ToString();
+            var forwardedHost = context.Request.Headers["X-Forwarded-Host"].ToString();
+
+            StartupLog.LogEventSubIngressCandidateReceived(
+                eventSubIngressLogger,
                 context.Request.Method,
                 context.Request.Path.Value,
                 context.Request.Scheme,
                 context.Request.Host.Value,
-                context.Request.Headers["X-Forwarded-Proto"].ToString(),
-                context.Request.Headers["X-Forwarded-Host"].ToString());
+                forwardedProto,
+                forwardedHost);
         }
 
-        await next();
+        await next().ConfigureAwait(false);
 
         if (isEventSubCandidatePath)
         {
-            eventSubIngressLogger.LogInformation(
-                "EventSub ingress candidate request completed. Method={Method}, Path={Path}, StatusCode={StatusCode}",
+            StartupLog.LogEventSubIngressCandidateCompleted(
+                eventSubIngressLogger,
                 context.Request.Method,
                 context.Request.Path.Value,
                 context.Response.StatusCode);
@@ -227,15 +234,17 @@ app.MapStaticAssets();
 
 app.MapGet("/account/login", async context =>
 {
-    await context.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme,
-        new AuthenticationProperties { RedirectUri = "/" });
+    await context.ChallengeAsync(
+        OpenIdConnectDefaults.AuthenticationScheme,
+        new AuthenticationProperties { RedirectUri = "/" }).ConfigureAwait(false);
 });
 
 app.MapGet("/account/logout", async context =>
 {
-    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    await context.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme,
-        new AuthenticationProperties { RedirectUri = "/" });
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme).ConfigureAwait(false);
+    await context.SignOutAsync(
+        OpenIdConnectDefaults.AuthenticationScheme,
+        new AuthenticationProperties { RedirectUri = "/" }).ConfigureAwait(false);
 });
 
 app.MapControllerRoute(
@@ -342,7 +351,11 @@ static void AddRolesFromJwt(ClaimsIdentity identity, string? jwt, string clientI
             }
         }
     }
-    catch (Exception ex)
+    catch (FormatException ex)
+    {
+        ExceptionlessClient.Default.SubmitException(ex);
+    }
+    catch (JsonException ex)
     {
         ExceptionlessClient.Default.SubmitException(ex);
     }
@@ -381,7 +394,7 @@ static void AddGroupClaimsAsRoles(ClaimsIdentity identity, string groupClaimType
             continue;
         }
 
-        if (value.TrimStart().StartsWith("[", StringComparison.Ordinal))
+        if (value.TrimStart().StartsWith('['))
         {
             try
             {
@@ -399,7 +412,7 @@ static void AddGroupClaimsAsRoles(ClaimsIdentity identity, string groupClaimType
                     }
                 }
             }
-            catch
+            catch (JsonException)
             {
                 // Ignore malformed group claim payloads.
             }
@@ -443,17 +456,17 @@ static void ConfigureGlobalExceptionForwarding(ExceptionlessClient exceptionless
         if (args.ExceptionObject is Exception ex)
         {
             exceptionlessClient.SubmitException(ex);
-            startupLogger.LogCritical(ex, "Unhandled AppDomain exception captured. IsTerminating={IsTerminating}", args.IsTerminating);
+            StartupLog.LogUnhandledAppDomainExceptionCaptured(startupLogger, ex, args.IsTerminating);
             return;
         }
 
-        startupLogger.LogCritical("Unhandled AppDomain exception object captured, but it was not an Exception instance. IsTerminating={IsTerminating}", args.IsTerminating);
+        StartupLog.LogUnhandledAppDomainExceptionObjectCaptured(startupLogger, args.IsTerminating);
     };
 
     TaskScheduler.UnobservedTaskException += (_, args) =>
     {
         exceptionlessClient.SubmitException(args.Exception);
-        startupLogger.LogError(args.Exception, "Unobserved task exception captured.");
+        StartupLog.LogUnobservedTaskExceptionCaptured(startupLogger, args.Exception);
         args.SetObserved();
     };
 }

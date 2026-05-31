@@ -1,0 +1,130 @@
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.Extensions.Options
+@using TwitchTools.Web.Options
+@inject IAuthorizationService AuthorizationService
+@inject IOptions<FeatureFlagsOptions> FeatureFlags
+
+@{
+  TempData.Keep();
+  string? currentPage = ViewContext.HttpContext.Request.Path;
+
+  var isAuthenticated = User.Identity?.IsAuthenticated == true;
+  var canAccessAdmin = isAuthenticated && (await AuthorizationService.AuthorizeAsync(User, "AdminOnly")).Succeeded;
+  var canAccessOidcDebug = isAuthenticated && FeatureFlags.Value.EnableOidcDebug;
+}
+
+<!-- Menu -->
+<aside id="layout-menu" class="layout-menu menu-vertical menu">
+
+  <div class='app-brand demo @((@ViewData["navbarFull"] != null && Convert.ToBoolean(@ViewData["navbarFull"])) ? "d-xl-none" : "")'>
+    <a asp-controller="Dashboard" asp-action="Index" class="app-brand-link gap-xl-0 gap-2">
+      <span class="app-brand-logo demo me-1">
+        @await Html.PartialAsync("../_Partials/_Macros")
+      </span>
+      <span class="app-brand-text demo menu-text fw-semibold ms-2">@TempData.Peek("appName")</span>
+    </a>
+
+    <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large ms-auto">
+      <i class="menu-toggle-icon d-xl-inline-block align-middle"></i>
+    </a>
+  </div>
+
+  <div class="menu-inner-shadow"></div>
+
+  <ul class="menu-inner py-1">
+    @if (isAuthenticated)
+    {
+    <li class='menu-item@(currentPage == "/" || currentPage.StartsWith("/Dashboard") ? " active" : "")'>
+      <a asp-controller="Dashboard" asp-action="Index" class="menu-link">
+        <i class="menu-icon icon-base ri ri-home-smile-line"></i>
+        <div>Dashboard</div>
+      </a>
+    </li>
+
+    <li class='menu-item@(currentPage.StartsWith("/MyTools") ? " active" : "")'>
+      <a asp-controller="MyTools" asp-action="Index" class="menu-link">
+        <i class="menu-icon icon-base ri ri-tools-line"></i>
+        <div>My Tools</div>
+      </a>
+    </li>
+
+    <li class='menu-item@(currentPage.StartsWith("/OverlaySettings") ? " active" : "")'>
+      <a asp-controller="OverlaySettings" asp-action="Index" class="menu-link">
+        <i class="menu-icon icon-base ri ri-layout-4-line"></i>
+        <div>Overlay Settings</div>
+      </a>
+    </li>
+
+    <li class='menu-item@(currentPage.StartsWith("/TimedMessages") ? " active" : "")'>
+      <a asp-controller="TimedMessages" asp-action="Index" class="menu-link">
+        <i class="menu-icon icon-base ri ri-timer-line"></i>
+        <div>Timed Messages</div>
+      </a>
+    </li>
+
+    <li class='menu-item@(currentPage.StartsWith("/ViewerStats") ? " active" : "")'>
+      <a asp-controller="ViewerStats" asp-action="Index" class="menu-link">
+        <i class="menu-icon icon-base ri ri-bar-chart-2-line"></i>
+        <div>Viewer Stats</div>
+      </a>
+    </li>
+    }
+
+    @if (canAccessAdmin)
+    {
+    <li class='menu-item@(currentPage.StartsWith("/Admin") ? " active open" : "")'>
+      <a href="javascript:void(0);" class="menu-link menu-toggle">
+        <i class="menu-icon icon-base ri ri-settings-5-line"></i>
+        <div>Admin</div>
+      </a>
+      <ul class="menu-sub">
+        <li class='menu-item@(currentPage == "/Admin" || currentPage == "/Admin/Index" ? " active" : "")'>
+          <a asp-controller="Admin" asp-action="Index" class="menu-link">
+            <div>Overview</div>
+          </a>
+        </li>
+        <li class='menu-item@(currentPage == "/Admin/EventSub" ? " active" : "")'>
+          <a asp-controller="Admin" asp-action="EventSub" class="menu-link">
+            <div>EventSub</div>
+          </a>
+        </li>
+      </ul>
+    </li>
+    }
+
+    <li class='menu-item@(currentPage.StartsWith("/FAQ") ? " active" : "")'>
+      <a asp-controller="FAQ" asp-action="Index" class="menu-link">
+        <i class="menu-icon icon-base ri ri-question-line"></i>
+        <div>FAQ</div>
+      </a>
+    </li>
+
+    @if (canAccessOidcDebug)
+    {
+    <li class='menu-item@(currentPage.StartsWith("/OidcDebug") ? " active" : "")'>
+      <a asp-controller="OidcDebug" asp-action="Index" class="menu-link">
+        <i class="menu-icon icon-base ri ri-bug-line"></i>
+        <div>OIDC Debug</div>
+      </a>
+    </li>
+    }
+
+    <li class="menu-header mt-7">
+      <span class="menu-header-text">Account</span>
+    </li>
+
+    <li class='menu-item@(currentPage.StartsWith("/Home/Privacy") ? " active" : "")'>
+      <a asp-controller="Home" asp-action="Privacy" class="menu-link">
+        <i class="menu-icon icon-base ri ri-lock-line"></i>
+        <div>Privacy</div>
+      </a>
+    </li>
+
+    <li class='menu-item@(currentPage.StartsWith("/Home") ? " active" : "")'>
+      <a asp-controller="Home" asp-action="Index" class="menu-link">
+        <i class="menu-icon icon-base ri ri-home-4-line"></i>
+        <div>Home</div>
+      </a>
+    </li>
+  </ul>
+</aside>

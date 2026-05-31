@@ -972,6 +972,6 @@ public sealed class TwitchEventSubService(
     {
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(message));
-        return "sha256=" + Convert.ToHexString(hash).ToLowerInvariant();
+        return "sha256=" + Convert.ToHexString(hash).ToUpperInvariant();
     }
 }

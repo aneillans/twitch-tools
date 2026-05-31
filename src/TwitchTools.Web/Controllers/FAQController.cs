@@ -6,9 +6,9 @@ namespace TwitchTools.Web.Controllers;
 
 public class FAQController : Controller
 {
+    [HttpGet]
     public IActionResult Index()
     {
         return View();
     }
-
 }

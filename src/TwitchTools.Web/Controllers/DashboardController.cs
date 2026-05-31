@@ -9,6 +9,7 @@ namespace TwitchTools.Web.Controllers;
 [Authorize]
 public sealed class DashboardController(AppDbContext dbContext) : Controller
 {
+    [HttpGet]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var ownerSubject = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");

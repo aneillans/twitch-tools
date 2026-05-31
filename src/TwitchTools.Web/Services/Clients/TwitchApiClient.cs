@@ -332,6 +332,8 @@ public sealed class TwitchApiClient(
 
     public async Task<TwitchFollowerEvent?> GetLatestFollowerAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(authContext);
+
         if (string.IsNullOrWhiteSpace(authContext.ModeratorUserId))
         {
             return null;

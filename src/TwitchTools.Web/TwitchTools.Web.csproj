@@ -7,13 +7,21 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Exceptionless.AspNetCore" Version="6.1.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.7" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.7">
+    <PackageReference Include="Neillans.TemplateKit.Auth" />
+    <PackageReference Include="Neillans.TemplateKit.Data" />
+    <PackageReference Include="Exceptionless.AspNetCore" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <RazorGenerate Remove="Theming/MaterioOverrides/import-backups/**/*.cshtml" />
+    <Content Remove="Theming/MaterioOverrides/import-backups/**/*.cshtml" />
+    <None Include="Theming/MaterioOverrides/import-backups/**/*.cshtml" />
   </ItemGroup>
 
 </Project>

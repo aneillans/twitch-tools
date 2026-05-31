@@ -368,7 +368,13 @@ public sealed class MyToolsController(
                 ? "BlueSky connection successful."
                 : "BlueSky connection failed. Check your identifier and app password.";
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "BlueSky connection test failed for streamer {StreamerId}.", streamer.Id);
+            ExceptionlessClient.Default.SubmitException(ex);
+            TempData["StatusMessage"] = "BlueSky connection failed unexpectedly. The error has been captured for review.";
+        }
+        catch (JsonException ex)
         {
             logger.LogError(ex, "BlueSky connection test failed for streamer {StreamerId}.", streamer.Id);
             ExceptionlessClient.Default.SubmitException(ex);
@@ -382,6 +388,8 @@ public sealed class MyToolsController(
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveBlueSky([Bind(Prefix = nameof(MyToolsViewModel.BlueSky))] BlueSkyConnectionInput input, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(input);
+
         var ownerSubject = GetOwnerSubject();
         if (ownerSubject is null)
         {
