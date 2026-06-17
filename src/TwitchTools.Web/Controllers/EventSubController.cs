@@ -11,6 +11,7 @@ public sealed class EventSubController(
     ILogger<EventSubController> logger) : Controller
 {
     [HttpPost]
+    [IgnoreAntiforgeryToken]
     public async Task<IActionResult> Callback(CancellationToken cancellationToken)
     {
         Request.EnableBuffering();

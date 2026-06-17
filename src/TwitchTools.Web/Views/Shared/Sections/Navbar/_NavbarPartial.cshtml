@@ -1,0 +1,94 @@
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.Extensions.Options
+@using TwitchTools.Web.Options
+@inject IAuthorizationService AuthorizationService
+@inject IOptions<FeatureFlagsOptions> FeatureFlags
+
+@{
+  var isAuthenticated = User.Identity?.IsAuthenticated == true;
+  var canAccessAdmin = isAuthenticated && (await AuthorizationService.AuthorizeAsync(User, "AdminOnly")).Succeeded;
+  var canAccessOidcDebug = isAuthenticated && FeatureFlags.Value.EnableOidcDebug;
+}
+
+@* ! Brand demo (display only for navbar-full and hide on below xl) *@
+@if (ViewData["navbarFull"] != null)
+{
+  <div class="navbar-brand app-brand demo d-none d-xl-flex py-0 me-6">
+    <a asp-controller="Dashboard" asp-action="Index" class="app-brand-link gap-2">
+      <span class="app-brand-logo demo">
+        @await Html.PartialAsync("../_Partials/_Macros")
+      </span>
+      <span class="app-brand-text demo menu-text fw-bold">@TempData.Peek("appName")</span>
+    </a>
+  </div>
+}
+
+@* ! Not required for layout-without-menu *@
+@if (ViewData["navbarHideToggle"] == null)
+{
+  <div class='layout-menu-toggle navbar-nav align-items-xl-center me-4 me-xl-0 d-xl-none'>
+    <a class="nav-item nav-link px-0 me-xl-6" href="javascript:void(0)">
+      <i class="icon-base ri ri-menu-line icon-md"></i>
+    </a>
+  </div>
+}
+
+<div class="navbar-nav-right d-flex align-items-center justify-content-end" id="navbar-collapse">
+  <div class="navbar-nav align-items-center">
+    @* <div class="nav-item d-flex align-items-center">
+      <i class="icon-base ri ri-search-line icon-lg lh-0"></i>
+      <input type="text" class="form-control border-0 shadow-none" placeholder="Search..." aria-label="Search..." />
+    </div> *@
+  </div>
+
+  @if (isAuthenticated)
+  {
+  <ul class="navbar-nav flex-row align-items-center ms-md-auto">
+    <li class="nav-item navbar-dropdown dropdown-user dropdown">
+      <a class="nav-link dropdown-toggle hide-arrow p-0" href="javascript:void(0);" data-bs-toggle="dropdown">
+        <div class="avatar avatar-online">
+          <img src="~/img/avatars/blank.svg" alt="Profile" class="rounded-circle" />
+        </div>
+      </a>
+      <ul class="dropdown-menu dropdown-menu-end mt-3 py-2">
+        <li>
+          <a class="dropdown-item" asp-controller="MyTools" asp-action="Index">
+            <i class="icon-base ri ri-tools-line icon-22px me-2"></i>
+            <span class="align-middle">My Tools</span>
+          </a>
+        </li>
+        <li>
+          <a class="dropdown-item" asp-controller="OverlaySettings" asp-action="Index">
+            <i class="icon-base ri ri-layout-4-line icon-22px me-2"></i>
+            <span class="align-middle">Overlay Settings</span>
+          </a>
+        </li>
+        <li>
+          <a class="dropdown-item" asp-controller="Dashboard" asp-action="Index">
+            <i class="icon-base ri ri-home-smile-line icon-22px me-2"></i>
+            <span class="align-middle">Dashboard</span>
+          </a>
+        </li>
+        @if (canAccessAdmin)
+        {
+        <li>
+          <a class="dropdown-item" asp-controller="Admin" asp-action="Index">
+            <i class="icon-base ri ri-settings-5-line icon-22px me-2"></i>
+            <span class="align-middle">Admin</span>
+          </a>
+        </li>
+        }
+        @if (canAccessOidcDebug)
+        {
+        <li>
+          <a class="dropdown-item" asp-controller="OidcDebug" asp-action="Index">
+            <i class="icon-base ri ri-bug-line icon-22px me-2"></i>
+            <span class="align-middle">OIDC Debug</span>
+          </a>
+        </li>
+        }
+      </ul>
+    </li>
+  </ul>
+  }
+</div>
