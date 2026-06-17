@@ -6,7 +6,7 @@
 <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
     <div>
         <h1 class="mb-1">Timed Chat Messages</h1>
-        <p class="text-muted mb-0">Create and manage recurring messages posted to your Twitch chat.</p>
+        <p class="text-muted mb-0">Create and manage recurring messages posted to your Twitch chat. Intervals are measured in minutes.</p>
     </div>
     <a class="btn btn-outline-secondary" asp-controller="MyTools" asp-action="Index">Back to Tools and Connections</a>
 </div>
@@ -24,7 +24,12 @@
                 <input class="form-control" name="MessageText" placeholder="Message text" required />
             </div>
             <div class="col-sm-8 col-md-9">
-                <input class="form-control" type="number" min="1" name="IntervalMinutes" value="30" required />
+                <label class="form-label mb-1" for="intervalMinutes">Interval (minutes)</label>
+                <div class="input-group">
+                    <input class="form-control" id="intervalMinutes" type="number" min="1" name="IntervalMinutes" value="30" required />
+                    <span class="input-group-text">minutes</span>
+                </div>
+                <small class="text-muted">Message posts after this many elapsed minutes since it was last sent.</small>
             </div>
             <div class="col-sm-4 col-md-3 d-grid">
                 <button class="btn btn-primary" type="submit">Add Message</button>
@@ -42,7 +47,7 @@
                     <thead>
                         <tr>
                             <th>Message</th>
-                            <th>Interval</th>
+                            <th>Interval (minutes)</th>
                             <th>Status</th>
                             <th></th>
                         </tr>
@@ -52,7 +57,7 @@
                     {
                         <tr>
                             <td>@msg.MessageText</td>
-                            <td>@msg.IntervalMinutes min</td>
+                            <td>@msg.IntervalMinutes minute@(msg.IntervalMinutes == 1 ? string.Empty : "s")</td>
                             <td>@(msg.Enabled ? "Enabled" : "Disabled")</td>
                             <td class="text-end">
                                 <form asp-controller="TimedMessages" asp-action="Toggle" asp-route-id="@msg.Id" method="post" class="d-inline">

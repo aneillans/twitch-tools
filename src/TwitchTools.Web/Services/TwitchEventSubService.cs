@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Exceptionless;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TwitchTools.Web.Data;
@@ -14,13 +15,16 @@ public sealed class TwitchEventSubService(
     AppDbContext dbContext,
     ITwitchApiClient twitchApiClient,
     IOptions<TwitchOptions> twitchOptions,
-    IOptions<FeatureFlagsOptions> featureFlags,
+    IBlueSkyService blueSkyService,
+    IDiscordScheduleSyncService discordScheduleSyncService,
     IOverlayEventBroker overlayEventBroker,
     ILogger<TwitchEventSubService> logger) : ITwitchEventSubService
 {
     private const string ChannelSubscribeType = "channel.subscribe";
     private const string ChannelSubscriptionMessageType = "channel.subscription.message";
     private const string ChannelChatMessageType = "channel.chat.message";
+    private const string StreamOnlineType = "stream.online";
+    private const string StreamOfflineType = "stream.offline";
 
     private static readonly string[] ChannelSubscriptionRequiredScopes = ["channel:read:subscriptions"];
     private static readonly string[] ChatUserRequiredScopes = ["user:read:chat", "user:bot"];
@@ -100,6 +104,18 @@ public sealed class TwitchEventSubService(
         if (string.Equals(subscriptionType, "channel.chat.message", StringComparison.OrdinalIgnoreCase))
         {
             await HandleChatMessageAsync(notificationDocument.RootElement.GetProperty("event"), cancellationToken);
+            return new EventSubWebhookResult(StatusCode: StatusCodes.Status204NoContent);
+        }
+
+        if (string.Equals(subscriptionType, StreamOnlineType, StringComparison.OrdinalIgnoreCase))
+        {
+            await HandleStreamStatusAsync(notificationDocument.RootElement.GetProperty("event"), isLive: true, cancellationToken);
+            return new EventSubWebhookResult(StatusCode: StatusCodes.Status204NoContent);
+        }
+
+        if (string.Equals(subscriptionType, StreamOfflineType, StringComparison.OrdinalIgnoreCase))
+        {
+            await HandleStreamStatusAsync(notificationDocument.RootElement.GetProperty("event"), isLive: false, cancellationToken);
             return new EventSubWebhookResult(StatusCode: StatusCodes.Status204NoContent);
         }
 
@@ -200,6 +216,28 @@ public sealed class TwitchEventSubService(
             ensuredCount += resubResult.EnsuredCount;
             alreadyExistsCount += resubResult.AlreadyExistsCount;
             failedCount += resubResult.FailedCount;
+
+            var streamOnlineResult = await EnsureSubscriptionTypeAsync(
+                streamer,
+                auth,
+                options,
+                StreamOnlineType,
+                authorizationLookup,
+                cancellationToken);
+            ensuredCount += streamOnlineResult.EnsuredCount;
+            alreadyExistsCount += streamOnlineResult.AlreadyExistsCount;
+            failedCount += streamOnlineResult.FailedCount;
+
+            var streamOfflineResult = await EnsureSubscriptionTypeAsync(
+                streamer,
+                auth,
+                options,
+                StreamOfflineType,
+                authorizationLookup,
+                cancellationToken);
+            ensuredCount += streamOfflineResult.EnsuredCount;
+            alreadyExistsCount += streamOfflineResult.AlreadyExistsCount;
+            failedCount += streamOfflineResult.FailedCount;
 
             if (!string.IsNullOrWhiteSpace(streamer.CustomOverlayToken))
             {
@@ -401,6 +439,11 @@ public sealed class TwitchEventSubService(
         (string Key, string Value)? extraCondition,
         IReadOnlyDictionary<string, TwitchUserAuthorization> authorizations)
     {
+        if (eventSubType is StreamOnlineType or StreamOfflineType)
+        {
+            return null;
+        }
+
         if (eventSubType is ChannelSubscribeType or ChannelSubscriptionMessageType)
         {
             return BuildScopeWarning(
@@ -644,6 +687,112 @@ public sealed class TwitchEventSubService(
             streamer.DisplayName,
             chatterName,
             messageId);
+    }
+
+    private async Task HandleStreamStatusAsync(JsonElement eventElement, bool isLive, CancellationToken cancellationToken)
+    {
+        var broadcasterUserId = eventElement.TryGetProperty("broadcaster_user_id", out var bElement) && bElement.ValueKind == JsonValueKind.String
+            ? bElement.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(broadcasterUserId))
+        {
+            logger.LogWarning("EventSub stream status payload is missing broadcaster_user_id.");
+            return;
+        }
+
+        var streamer = await dbContext.Streamers
+            .FirstOrDefaultAsync(x => x.TwitchUserId == broadcasterUserId, cancellationToken);
+        if (streamer is null)
+        {
+            logger.LogWarning("Received {EventType} notification for unknown streamer {BroadcasterUserId}.", isLive ? StreamOnlineType : StreamOfflineType, broadcasterUserId);
+            return;
+        }
+
+        var previous = await dbContext.LiveNotificationEvents
+            .AsNoTracking()
+            .Where(x => x.StreamerId == streamer.Id)
+            .OrderByDescending(x => x.RecordedUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (previous?.IsLive == isLive)
+        {
+            logger.LogDebug("Ignoring duplicate {EventType} transition for {Streamer}.", isLive ? StreamOnlineType : StreamOfflineType, streamer.DisplayName);
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        var streamStatus = new TwitchStreamStatus(isLive, null, null);
+        if (isLive)
+        {
+            var auth = BuildBroadcasterAuth(streamer, twitchOptions.Value);
+            if (auth is not null)
+            {
+                var currentStatus = await twitchApiClient.GetStreamStatusAsync(streamer.TwitchUserId, auth, cancellationToken);
+                streamStatus = new TwitchStreamStatus(true, currentStatus.StreamTitle, currentStatus.GameName);
+            }
+
+            var timedMessages = await dbContext.TimedChatMessages
+                .Where(x => x.StreamerId == streamer.Id)
+                .ToListAsync(cancellationToken);
+            foreach (var timedMessage in timedMessages)
+            {
+                timedMessage.LastSentUtc = now;
+            }
+
+            var hasDiscordTargets = await dbContext.DiscordGuildSyncs
+                .AsNoTracking()
+                .AnyAsync(x => x.StreamerId == streamer.Id, cancellationToken);
+            if (hasDiscordTargets)
+            {
+                await TrySyncDiscordScheduleOnLiveAsync(streamer, cancellationToken);
+            }
+        }
+
+        var postUri = await blueSkyService.PublishLiveStateAsync(streamer, isLive, streamStatus, cancellationToken);
+
+        dbContext.LiveNotificationEvents.Add(new LiveNotificationEvent
+        {
+            StreamerId = streamer.Id,
+            IsLive = isLive,
+            BlueSkyPostUri = postUri,
+            RecordedUtc = now
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Recorded live transition via EventSub for {Streamer}. IsLive={IsLive}",
+            streamer.DisplayName,
+            isLive);
+    }
+
+    private async Task TrySyncDiscordScheduleOnLiveAsync(Streamer streamer, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await discordScheduleSyncService.SyncScheduleAsync(streamer, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Discord schedule sync failed on live transition for {Streamer}.", streamer.DisplayName);
+            ExceptionlessClient.Default.SubmitException(ex);
+        }
+    }
+
+    private static TwitchAuthContext? BuildBroadcasterAuth(Streamer streamer, TwitchOptions options)
+    {
+        var clientId = string.IsNullOrWhiteSpace(streamer.TwitchClientId) ? options.DefaultClientId : streamer.TwitchClientId;
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(streamer.TwitchStreamerAccessToken))
+        {
+            return null;
+        }
+
+        return new TwitchAuthContext(
+            clientId,
+            streamer.TwitchStreamerAccessToken,
+            streamer.TwitchBotUserId ?? options.DefaultBotUserId,
+            streamer.TwitchBotUserId ?? options.DefaultBotUserId);
     }
 
     private async Task RecordSubscriberAsync(JsonElement eventElement, CancellationToken cancellationToken)
