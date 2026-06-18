@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TwitchTools.Web.Data;
+using TwitchTools.Web.Models;
 using TwitchTools.Web.Services;
 
 namespace TwitchTools.Web.Controllers;
@@ -31,8 +32,21 @@ public sealed class AdminController(AppDbContext dbContext, ITwitchEventSubServi
     public async Task<IActionResult> EventSub(CancellationToken cancellationToken)
     {
         var result = await twitchEventSubService.GetDiagnosticsAsync(cancellationToken);
+        var recentPayloads = await dbContext.EventSubDebugMessages
+            .AsNoTracking()
+            .Include(x => x.Streamer)
+            .OrderByDescending(x => x.RecordedUtc)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        var model = new AdminEventSubViewModel
+        {
+            Diagnostics = result,
+            RecentPayloads = recentPayloads
+        };
+
         ViewData["StatusMessage"] = TempData["StatusMessage"] as string;
-        return View(result);
+        return View(model);
     }
 
     [HttpPost("/admin/eventsub/resync")]

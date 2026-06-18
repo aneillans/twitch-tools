@@ -9,5 +9,6 @@ public sealed class FeatureFlagsOptions
     public bool EnableOidcDebug { get; set; }
     public bool EnableEventSubIngressLogging { get; set; }
     public bool EnableEventSubPayloadLogging { get; set; }
+    public int EventSubPayloadRetentionDays { get; set; } = 14;
 }
 #pragma warning restore CA1515

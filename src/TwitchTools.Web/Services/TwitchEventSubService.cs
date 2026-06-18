@@ -59,7 +59,7 @@ public sealed class TwitchEventSubService(
             return new EventSubWebhookResult(StatusCode: StatusCodes.Status403Forbidden);
         }
 
-        LogPayloadForDebugIfEnabled(messageType, messageId, rawBody);
+        await SavePayloadForDebugIfEnabledAsync(messageType, messageId, rawBody, cancellationToken);
 
         if (string.Equals(messageType, "webhook_callback_verification", StringComparison.OrdinalIgnoreCase))
         {
@@ -978,7 +978,11 @@ public sealed class TwitchEventSubService(
         return "sha256=" + Convert.ToHexString(hash).ToUpperInvariant();
     }
 
-    private void LogPayloadForDebugIfEnabled(string messageType, string messageId, string rawBody)
+    private async Task SavePayloadForDebugIfEnabledAsync(
+        string messageType,
+        string messageId,
+        string rawBody,
+        CancellationToken cancellationToken)
     {
         if (!featureFlags.Value.EnableEventSubPayloadLogging)
         {
@@ -986,6 +990,8 @@ public sealed class TwitchEventSubService(
         }
 
         string? subscriptionType = null;
+        string? broadcasterUserId = null;
+        Guid? streamerId = null;
         try
         {
             using var document = JsonDocument.Parse(rawBody);
@@ -996,17 +1002,64 @@ public sealed class TwitchEventSubService(
             {
                 subscriptionType = typeElement.GetString();
             }
+
+            if (document.RootElement.TryGetProperty("event", out var eventElement)
+                && eventElement.ValueKind == JsonValueKind.Object
+                && eventElement.TryGetProperty("broadcaster_user_id", out var broadcasterElement)
+                && broadcasterElement.ValueKind == JsonValueKind.String)
+            {
+                broadcasterUserId = broadcasterElement.GetString();
+            }
         }
         catch (JsonException)
         {
             // Best-effort debug logging only.
         }
 
+        if (!string.IsNullOrWhiteSpace(broadcasterUserId))
+        {
+            streamerId = await dbContext.Streamers
+                .AsNoTracking()
+                .Where(x => x.TwitchUserId == broadcasterUserId)
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var retentionDays = featureFlags.Value.EventSubPayloadRetentionDays;
+        if (retentionDays > 0)
+        {
+            var cutoffUtc = DateTime.UtcNow.AddDays(-retentionDays);
+            var deletedRows = await dbContext.EventSubDebugMessages
+                .Where(x => x.RecordedUtc < cutoffUtc)
+                .ExecuteDeleteAsync(cancellationToken);
+
+            if (deletedRows > 0)
+            {
+                logger.LogInformation(
+                    "Pruned {Count} EventSub debug payload rows older than {RetentionDays} day(s).",
+                    deletedRows,
+                    retentionDays);
+            }
+        }
+
+        dbContext.EventSubDebugMessages.Add(new EventSubDebugMessage
+        {
+            MessageType = messageType,
+            SubscriptionType = subscriptionType,
+            MessageId = string.IsNullOrWhiteSpace(messageId) ? null : messageId,
+            BroadcasterUserId = broadcasterUserId,
+            StreamerId = streamerId,
+            Payload = rawBody,
+            RecordedUtc = DateTime.UtcNow
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
         logger.LogInformation(
-            "EventSub payload captured for debug. MessageType={MessageType}, SubscriptionType={SubscriptionType}, MessageId={MessageId}, Payload={Payload}",
+            "EventSub payload captured for debug. MessageType={MessageType}, SubscriptionType={SubscriptionType}, MessageId={MessageId}, StreamerId={StreamerId}",
             messageType,
             subscriptionType ?? "<none>",
             messageId,
-            rawBody);
+            streamerId);
     }
 }

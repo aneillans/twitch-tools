@@ -53,6 +53,7 @@ cp .env.example .env
 - `DISCORD_BOT_CLIENT_ID` if you want the in-app Discord invite link.
 - `FEATURE_DISABLE_EXTERNAL_POSTING=true` to run a non-posting test mode.
 - `FEATURE_ENABLE_EVENTSUB_PAYLOAD_LOGGING=true` to log full EventSub payloads for debugging.
+- `FEATURE_EVENTSUB_PAYLOAD_RETENTION_DAYS=14` to control how long payload logs are retained.
 
 3. Start the stack:
 
@@ -134,6 +135,8 @@ Important sections:
   - Environment variable override: `FeatureFlags__DisableExternalPosting=true`.
   - `EnableEventSubPayloadLogging` logs full EventSub request payloads (including chat message events) for debug tracing.
   - Environment variable override: `FeatureFlags__EnableEventSubPayloadLogging=true`.
+  - `EventSubPayloadRetentionDays` controls automatic cleanup of old EventSub payload debug rows; default is `14` days. Set `0` or a negative value to disable automatic pruning.
+  - Environment variable override: `FeatureFlags__EventSubPayloadRetentionDays=14`.
 - `Exceptionless`
   - API key and server URL.
 

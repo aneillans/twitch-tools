@@ -67,6 +67,7 @@ services:
       FeatureFlags__DisableExternalPosting: ${FEATURE_DISABLE_EXTERNAL_POSTING:-false}
       FeatureFlags__EnableEventSubIngressLogging: ${FEATURE_ENABLE_EVENTSUB_INGRESS_LOGGING:-false}
       FeatureFlags__EnableEventSubPayloadLogging: ${FEATURE_ENABLE_EVENTSUB_PAYLOAD_LOGGING:-false}
+      FeatureFlags__EventSubPayloadRetentionDays: ${FEATURE_EVENTSUB_PAYLOAD_RETENTION_DAYS:-14}
     ports:
       - "8080:8080"
     depends_on:
