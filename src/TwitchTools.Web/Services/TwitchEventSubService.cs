@@ -15,6 +15,7 @@ public sealed class TwitchEventSubService(
     AppDbContext dbContext,
     ITwitchApiClient twitchApiClient,
     IOptions<TwitchOptions> twitchOptions,
+    IOptions<FeatureFlagsOptions> featureFlags,
     IBlueSkyService blueSkyService,
     IDiscordScheduleSyncService discordScheduleSyncService,
     IOverlayEventBroker overlayEventBroker,
@@ -57,6 +58,8 @@ public sealed class TwitchEventSubService(
             logger.LogWarning("Rejected EventSub webhook because the signature did not match.");
             return new EventSubWebhookResult(StatusCode: StatusCodes.Status403Forbidden);
         }
+
+        LogPayloadForDebugIfEnabled(messageType, messageId, rawBody);
 
         if (string.Equals(messageType, "webhook_callback_verification", StringComparison.OrdinalIgnoreCase))
         {
@@ -973,5 +976,37 @@ public sealed class TwitchEventSubService(
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(message));
         return "sha256=" + Convert.ToHexString(hash).ToUpperInvariant();
+    }
+
+    private void LogPayloadForDebugIfEnabled(string messageType, string messageId, string rawBody)
+    {
+        if (!featureFlags.Value.EnableEventSubPayloadLogging)
+        {
+            return;
+        }
+
+        string? subscriptionType = null;
+        try
+        {
+            using var document = JsonDocument.Parse(rawBody);
+            if (document.RootElement.TryGetProperty("subscription", out var subscription)
+                && subscription.ValueKind == JsonValueKind.Object
+                && subscription.TryGetProperty("type", out var typeElement)
+                && typeElement.ValueKind == JsonValueKind.String)
+            {
+                subscriptionType = typeElement.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            // Best-effort debug logging only.
+        }
+
+        logger.LogInformation(
+            "EventSub payload captured for debug. MessageType={MessageType}, SubscriptionType={SubscriptionType}, MessageId={MessageId}, Payload={Payload}",
+            messageType,
+            subscriptionType ?? "<none>",
+            messageId,
+            rawBody);
     }
 }

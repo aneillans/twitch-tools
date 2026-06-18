@@ -52,6 +52,7 @@ cp .env.example .env
 - `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` if using Twitch OAuth connect flow.
 - `DISCORD_BOT_CLIENT_ID` if you want the in-app Discord invite link.
 - `FEATURE_DISABLE_EXTERNAL_POSTING=true` to run a non-posting test mode.
+- `FEATURE_ENABLE_EVENTSUB_PAYLOAD_LOGGING=true` to log full EventSub payloads for debugging.
 
 3. Start the stack:
 
@@ -131,6 +132,8 @@ Important sections:
 - `FeatureFlags`
   - `DisableExternalPosting` disables outward posting side effects (BlueSky publish/profile updates, Discord event create/update/delete sync, timed Twitch chat sends, EventSub subscription creation).
   - Environment variable override: `FeatureFlags__DisableExternalPosting=true`.
+  - `EnableEventSubPayloadLogging` logs full EventSub request payloads (including chat message events) for debug tracing.
+  - Environment variable override: `FeatureFlags__EnableEventSubPayloadLogging=true`.
 - `Exceptionless`
   - API key and server URL.
 
