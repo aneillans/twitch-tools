@@ -45,6 +45,12 @@ else
 
 <div class="mb-3 d-flex gap-2">
     <a asp-action="Index" class="btn btn-outline-secondary btn-sm">&larr; Admin</a>
+    <form method="post" asp-action="EventSubDeleteAll">
+        <button type="submit" class="btn btn-outline-danger btn-sm"
+                onclick="return confirm('This will delete ALL EventSub subscriptions without recreating them. Continue?')">
+            Delete All Only
+        </button>
+    </form>
     <form method="post" asp-action="EventSubForceResync">
         <button type="submit" class="btn btn-warning btn-sm"
                 onclick="return confirm('This will delete ALL EventSub subscriptions and re-bootstrap. Continue?')">

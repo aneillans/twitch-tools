@@ -45,4 +45,15 @@ public sealed class AdminController(AppDbContext dbContext, ITwitchEventSubServi
             : $"Force resync completed with warnings. Deleted {result.DeletedCount}, created {result.EnsuredCount}, already existed {result.AlreadyExistsCount}, failed {result.FailedCount}. {result.Message}";
         return RedirectToAction(nameof(EventSub));
     }
+
+    [HttpPost("/admin/eventsub/delete-all")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EventSubDeleteAll(CancellationToken cancellationToken)
+    {
+        var result = await twitchEventSubService.DeleteAllSubscriptionsAsync(cancellationToken);
+        TempData["StatusMessage"] = string.IsNullOrWhiteSpace(result.Message)
+            ? $"Delete all completed. Deleted {result.DeletedCount}, failed {result.FailedCount}."
+            : $"Delete all completed with warnings. Deleted {result.DeletedCount}, failed {result.FailedCount}. {result.Message}";
+        return RedirectToAction(nameof(EventSub));
+    }
 }
