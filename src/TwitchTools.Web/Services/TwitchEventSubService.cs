@@ -1003,8 +1003,8 @@ public sealed class TwitchEventSubService(
         }
 
         var message = string.Concat(messageId, messageTimestamp, rawBody);
-        var hmac = ComputeHmac(secret, message).ToLowerInvariant();
-        var providedSignature = messageSignature.Trim().ToLowerInvariant();
+        var hmac = ComputeHmac(secret, message).ToUpperInvariant();
+        var providedSignature = messageSignature.Trim().ToUpperInvariant();
         return CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(hmac),
             Encoding.UTF8.GetBytes(providedSignature));
