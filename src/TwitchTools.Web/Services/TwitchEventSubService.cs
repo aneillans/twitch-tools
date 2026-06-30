@@ -911,45 +911,83 @@ public sealed class TwitchEventSubService(
         }
 
         var auth = new TwitchAuthContext(options.DefaultClientId, appToken.AccessToken, null, null);
-        var deletedCount = 0;
-        var listResult = await twitchApiClient.GetEventSubSubscriptionsAsync(auth, cancellationToken);
-        if (listResult.IsSuccess)
-        {
-            foreach (var sub in listResult.Subscriptions)
-            {
-                var deleted = await twitchApiClient.DeleteEventSubSubscriptionAsync(sub.Id, auth, cancellationToken);
-                if (deleted)
-                {
-                    deletedCount++;
-                    logger.LogInformation("Deleted EventSub subscription {Id} ({Type}) during force resync.", sub.Id, sub.Type);
-                }
-                else
-                {
-                    logger.LogWarning("Failed to delete EventSub subscription {Id} ({Type}) during force resync.", sub.Id, sub.Type);
-                }
-            }
-        }
-        else
-        {
-            logger.LogWarning("Unable to list EventSub subscriptions before force resync. {ErrorMessage}", listResult.ErrorMessage);
-        }
+        var deleteAllResult = await DeleteAllSubscriptionsCoreAsync(auth, cancellationToken);
 
         var ensureSummary = await EnsureSubscriberSubscriptionsCoreAsync(cancellationToken);
         var message = ensureSummary.Message;
 
         logger.LogInformation(
             "Force resync of EventSub subscriptions completed. Deleted={DeletedCount}, Ensured={EnsuredCount}, AlreadyExists={AlreadyExistsCount}, Failed={FailedCount}",
-            deletedCount,
+            deleteAllResult.DeletedCount,
             ensureSummary.EnsuredCount,
             ensureSummary.AlreadyExistsCount,
             ensureSummary.FailedCount);
 
         return new EventSubForceResyncResult(
-            deletedCount,
+            deleteAllResult.DeletedCount,
             ensureSummary.EnsuredCount,
             ensureSummary.AlreadyExistsCount,
             ensureSummary.FailedCount,
             message);
+    }
+
+    public async Task<EventSubDeleteAllResult> DeleteAllSubscriptionsAsync(CancellationToken cancellationToken)
+    {
+        var options = twitchOptions.Value;
+        if (string.IsNullOrWhiteSpace(options.DefaultClientId) || string.IsNullOrWhiteSpace(options.OAuthClientSecret))
+        {
+            logger.LogWarning("Cannot delete EventSub subscriptions: credentials not configured.");
+            return new EventSubDeleteAllResult(0, 0, "Twitch credentials are not configured.");
+        }
+
+        var appToken = await twitchApiClient.GetAppAccessTokenAsync(options.DefaultClientId, options.OAuthClientSecret, cancellationToken);
+        if (!appToken.IsSuccess || string.IsNullOrWhiteSpace(appToken.AccessToken))
+        {
+            logger.LogWarning("Cannot delete EventSub subscriptions: failed to get app token. {ErrorMessage}", appToken.ErrorMessage);
+            return new EventSubDeleteAllResult(0, 0, $"Failed to obtain app access token: {appToken.ErrorMessage}");
+        }
+
+        var auth = new TwitchAuthContext(options.DefaultClientId, appToken.AccessToken, null, null);
+        var result = await DeleteAllSubscriptionsCoreAsync(auth, cancellationToken);
+
+        logger.LogInformation(
+            "Delete-all EventSub subscriptions completed. Deleted={DeletedCount}, Failed={FailedCount}",
+            result.DeletedCount,
+            result.FailedCount);
+
+        return result;
+    }
+
+    private async Task<EventSubDeleteAllResult> DeleteAllSubscriptionsCoreAsync(
+        TwitchAuthContext auth,
+        CancellationToken cancellationToken)
+    {
+        var deletedCount = 0;
+        var failedCount = 0;
+
+        var listResult = await twitchApiClient.GetEventSubSubscriptionsAsync(auth, cancellationToken);
+        if (!listResult.IsSuccess)
+        {
+            logger.LogWarning("Unable to list EventSub subscriptions before delete-all. {ErrorMessage}", listResult.ErrorMessage);
+            return new EventSubDeleteAllResult(0, 0, $"Failed to list EventSub subscriptions: {listResult.ErrorMessage}");
+        }
+
+        foreach (var sub in listResult.Subscriptions)
+        {
+            var deleted = await twitchApiClient.DeleteEventSubSubscriptionAsync(sub.Id, auth, cancellationToken);
+            if (deleted)
+            {
+                deletedCount++;
+                logger.LogInformation("Deleted EventSub subscription {Id} ({Type}) during delete-all.", sub.Id, sub.Type);
+            }
+            else
+            {
+                failedCount++;
+                logger.LogWarning("Failed to delete EventSub subscription {Id} ({Type}) during delete-all.", sub.Id, sub.Type);
+            }
+        }
+
+        return new EventSubDeleteAllResult(deletedCount, failedCount, null);
     }
 
     private static bool IsValidSignature(string secret, string messageId, string messageTimestamp, string rawBody, string messageSignature)
@@ -962,10 +1000,11 @@ public sealed class TwitchEventSubService(
         }
 
         var message = string.Concat(messageId, messageTimestamp, rawBody);
-        var hmac = ComputeHmac(secret, message);
+        var hmac = ComputeHmac(secret, message).ToLowerInvariant();
+        var providedSignature = messageSignature.Trim().ToLowerInvariant();
         return CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(hmac),
-            Encoding.UTF8.GetBytes(messageSignature));
+            Encoding.UTF8.GetBytes(providedSignature));
     }
 
     private static string ComputeHmac(string secret, string message)
