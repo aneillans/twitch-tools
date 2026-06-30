@@ -18,7 +18,7 @@
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageVersion Include="coverlet.collector" Version="6.0.2" />
     <PackageVersion Include="Exceptionless.AspNetCore" Version="6.1.0" />
-    <PackageVersion Include="Neillans.TemplateKit.Auth" Version="1.0.0" />
-    <PackageVersion Include="Neillans.TemplateKit.Data" Version="1.0.0" />
+    <PackageVersion Include="Neillans.TemplateKit.Auth" Version="1.0.1" />
+    <PackageVersion Include="Neillans.TemplateKit.Data" Version="1.0.1" />
   </ItemGroup>
 </Project>
