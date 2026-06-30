@@ -16,6 +16,7 @@ public sealed class AppDbContext(
     public DbSet<TimedChatMessage> TimedChatMessages => Set<TimedChatMessage>();
     public DbSet<ViewerDurationSample> ViewerDurationSamples => Set<ViewerDurationSample>();
     public DbSet<OverlaySnapshot> OverlaySnapshots => Set<OverlaySnapshot>();
+    public DbSet<EventSubDebugMessage> EventSubDebugMessages => Set<EventSubDebugMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -104,6 +105,18 @@ public sealed class AppDbContext(
             entity.Property(x => x.LastSubscriberName).HasMaxLength(128);
         });
 
+        modelBuilder.Entity<EventSubDebugMessage>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.RecordedUtc);
+            entity.HasIndex(x => x.StreamerId);
+            entity.Property(x => x.MessageType).HasMaxLength(64);
+            entity.Property(x => x.SubscriptionType).HasMaxLength(64);
+            entity.Property(x => x.MessageId).HasMaxLength(128);
+            entity.Property(x => x.BroadcasterUserId).HasMaxLength(64);
+            entity.Property(x => x.Payload);
+        });
+
         modelBuilder.Entity<LiveNotificationEvent>()
             .HasOne(x => x.Streamer)
             .WithMany(x => x.LiveNotificationEvents)
@@ -133,5 +146,11 @@ public sealed class AppDbContext(
             .HasOne(x => x.Streamer)
             .WithOne(x => x.OverlaySnapshot)
             .HasForeignKey<OverlaySnapshot>(x => x.StreamerId);
+
+        modelBuilder.Entity<EventSubDebugMessage>()
+            .HasOne(x => x.Streamer)
+            .WithMany()
+            .HasForeignKey(x => x.StreamerId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

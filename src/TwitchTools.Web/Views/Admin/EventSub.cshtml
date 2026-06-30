@@ -1,6 +1,7 @@
-@model TwitchTools.Web.Services.EventSubDiagnosticsResult
+@model TwitchTools.Web.Models.AdminEventSubViewModel
 @{
     ViewData["Title"] = "EventSub Diagnostics";
+    var diagnostics = Model.Diagnostics;
 }
 
 <h1>EventSub Diagnostics</h1>
@@ -13,29 +14,29 @@
     </div>
 }
 
-@if (!Model.IsConfigured)
+@if (!diagnostics.IsConfigured)
 {
     <div class="alert alert-warning">Twitch credentials are not configured — cannot query EventSub subscriptions.</div>
 }
-else if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+else if (!string.IsNullOrWhiteSpace(diagnostics.ErrorMessage))
 {
-    <div class="alert alert-danger">@Model.ErrorMessage</div>
+    <div class="alert alert-danger">@diagnostics.ErrorMessage</div>
 }
 else
 {
     <p class="text-muted">
-        <strong>@Model.Subscriptions.Count</strong> subscription(s) registered &mdash;
-        Cost: <strong>@Model.TotalCost</strong> / @Model.MaxTotalCost
+        <strong>@diagnostics.Subscriptions.Count</strong> subscription(s) registered &mdash;
+        Cost: <strong>@diagnostics.TotalCost</strong> / @diagnostics.MaxTotalCost
     </p>
 }
 
-@if (Model.GrantWarnings.Count > 0)
+@if (diagnostics.GrantWarnings.Count > 0)
 {
     <div class="alert alert-warning" role="alert">
         <h5 class="alert-heading mb-2">Grant Warnings</h5>
         <p class="mb-2">Some streamers are missing Twitch grants required for one or more EventSub subscription types.</p>
         <ul class="mb-0">
-            @foreach (var warning in Model.GrantWarnings)
+            @foreach (var warning in diagnostics.GrantWarnings)
             {
                 <li>@warning</li>
             }
@@ -59,7 +60,7 @@ else
     </form>
 </div>
 
-@if (Model.Subscriptions.Count > 0)
+@if (diagnostics.Subscriptions.Count > 0)
 {
     <table class="table table-striped table-sm">
         <thead>
@@ -73,7 +74,7 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (var sub in Model.Subscriptions.OrderBy(s => s.Type))
+            @foreach (var sub in diagnostics.Subscriptions.OrderBy(s => s.Type))
             {
                 var badgeClass = sub.Status switch
                 {
@@ -98,7 +99,53 @@ else
         </tbody>
     </table>
 }
-else if (Model.IsConfigured && string.IsNullOrWhiteSpace(Model.ErrorMessage))
+else if (diagnostics.IsConfigured && string.IsNullOrWhiteSpace(diagnostics.ErrorMessage))
 {
     <p class="text-muted">No subscriptions found. Run the bootstrap to create them.</p>
+}
+
+<hr class="my-4" />
+<h2 class="h4">Recent EventSub Payloads</h2>
+
+@if (Model.RecentPayloads.Count == 0)
+{
+    <p class="text-muted mb-0">No payloads captured yet. Enable FeatureFlags:EnableEventSubPayloadLogging and wait for incoming EventSub callbacks.</p>
+}
+else
+{
+    <p class="text-muted">Showing the most recent <strong>@Model.RecentPayloads.Count</strong> payload(s).</p>
+    <div class="table-responsive">
+        <table class="table table-bordered table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Recorded (UTC)</th>
+                    <th>Message Type</th>
+                    <th>Subscription Type</th>
+                    <th>Streamer</th>
+                    <th>Message ID</th>
+                    <th>Payload</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var payload in Model.RecentPayloads)
+                {
+                    <tr>
+                        <td><small>@payload.RecordedUtc.ToString("yyyy-MM-dd HH:mm:ss")</small></td>
+                        <td><code>@payload.MessageType</code></td>
+                        <td><code>@(string.IsNullOrWhiteSpace(payload.SubscriptionType) ? "-" : payload.SubscriptionType)</code></td>
+                        <td>
+                            <small>@(payload.Streamer?.DisplayName ?? payload.BroadcasterUserId ?? "unknown")</small>
+                        </td>
+                        <td><small class="text-muted font-monospace">@(payload.MessageId ?? "-")</small></td>
+                        <td>
+                            <details>
+                                <summary>View payload</summary>
+                                <pre class="mb-0 mt-2" style="max-width: 56rem; white-space: pre-wrap; word-break: break-word;"><code>@payload.Payload</code></pre>
+                            </details>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 }

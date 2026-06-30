@@ -43,12 +43,29 @@ public sealed class TimedChatMessageService(
             .Where(x => !x.LastSentUtc.HasValue || x.LastSentUtc <= now - x.Interval)
             .ToListAsync(cancellationToken);
 
+        var liveStatusByStreamerId = new Dictionary<Guid, bool>();
+
         foreach (var message in dueMessages)
         {
             var auth = BuildAuth(message.Streamer, twitchOptions.Value);
             if (auth is null)
             {
                 logger.LogWarning("Skipping timed message for {Streamer} because Twitch auth is not configured.", message.Streamer.DisplayName);
+                continue;
+            }
+
+            if (!liveStatusByStreamerId.TryGetValue(message.StreamerId, out var isLiveNow))
+            {
+                isLiveNow = !string.IsNullOrWhiteSpace(message.Streamer.TwitchUserId)
+                    && await twitchApiClient.IsStreamerLiveAsync(message.Streamer.TwitchUserId, auth, cancellationToken);
+                liveStatusByStreamerId[message.StreamerId] = isLiveNow;
+            }
+
+            if (!isLiveNow)
+            {
+                logger.LogDebug(
+                    "Skipping timed message for {Streamer} because Twitch currently reports the streamer as offline.",
+                    message.Streamer.DisplayName);
                 continue;
             }
 

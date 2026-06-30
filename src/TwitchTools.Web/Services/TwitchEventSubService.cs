@@ -15,6 +15,7 @@ public sealed class TwitchEventSubService(
     AppDbContext dbContext,
     ITwitchApiClient twitchApiClient,
     IOptions<TwitchOptions> twitchOptions,
+    IOptions<FeatureFlagsOptions> featureFlags,
     IBlueSkyService blueSkyService,
     IDiscordScheduleSyncService discordScheduleSyncService,
     IOverlayEventBroker overlayEventBroker,
@@ -57,6 +58,8 @@ public sealed class TwitchEventSubService(
             logger.LogWarning("Rejected EventSub webhook because the signature did not match.");
             return new EventSubWebhookResult(StatusCode: StatusCodes.Status403Forbidden);
         }
+
+        await SavePayloadForDebugIfEnabledAsync(messageType, messageId, rawBody, cancellationToken);
 
         if (string.Equals(messageType, "webhook_callback_verification", StringComparison.OrdinalIgnoreCase))
         {
@@ -1012,5 +1015,90 @@ public sealed class TwitchEventSubService(
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(message));
         return "sha256=" + Convert.ToHexString(hash).ToUpperInvariant();
+    }
+
+    private async Task SavePayloadForDebugIfEnabledAsync(
+        string messageType,
+        string messageId,
+        string rawBody,
+        CancellationToken cancellationToken)
+    {
+        if (!featureFlags.Value.EnableEventSubPayloadLogging)
+        {
+            return;
+        }
+
+        string? subscriptionType = null;
+        string? broadcasterUserId = null;
+        Guid? streamerId = null;
+        try
+        {
+            using var document = JsonDocument.Parse(rawBody);
+            if (document.RootElement.TryGetProperty("subscription", out var subscription)
+                && subscription.ValueKind == JsonValueKind.Object
+                && subscription.TryGetProperty("type", out var typeElement)
+                && typeElement.ValueKind == JsonValueKind.String)
+            {
+                subscriptionType = typeElement.GetString();
+            }
+
+            if (document.RootElement.TryGetProperty("event", out var eventElement)
+                && eventElement.ValueKind == JsonValueKind.Object
+                && eventElement.TryGetProperty("broadcaster_user_id", out var broadcasterElement)
+                && broadcasterElement.ValueKind == JsonValueKind.String)
+            {
+                broadcasterUserId = broadcasterElement.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            // Best-effort debug logging only.
+        }
+
+        if (!string.IsNullOrWhiteSpace(broadcasterUserId))
+        {
+            streamerId = await dbContext.Streamers
+                .AsNoTracking()
+                .Where(x => x.TwitchUserId == broadcasterUserId)
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var retentionDays = featureFlags.Value.EventSubPayloadRetentionDays;
+        if (retentionDays > 0)
+        {
+            var cutoffUtc = DateTime.UtcNow.AddDays(-retentionDays);
+            var deletedRows = await dbContext.EventSubDebugMessages
+                .Where(x => x.RecordedUtc < cutoffUtc)
+                .ExecuteDeleteAsync(cancellationToken);
+
+            if (deletedRows > 0)
+            {
+                logger.LogInformation(
+                    "Pruned {Count} EventSub debug payload rows older than {RetentionDays} day(s).",
+                    deletedRows,
+                    retentionDays);
+            }
+        }
+
+        dbContext.EventSubDebugMessages.Add(new EventSubDebugMessage
+        {
+            MessageType = messageType,
+            SubscriptionType = subscriptionType,
+            MessageId = string.IsNullOrWhiteSpace(messageId) ? null : messageId,
+            BroadcasterUserId = broadcasterUserId,
+            StreamerId = streamerId,
+            Payload = rawBody,
+            RecordedUtc = DateTime.UtcNow
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation(
+            "EventSub payload captured for debug. MessageType={MessageType}, SubscriptionType={SubscriptionType}, MessageId={MessageId}, StreamerId={StreamerId}",
+            messageType,
+            subscriptionType ?? "<none>",
+            messageId,
+            streamerId);
     }
 }
