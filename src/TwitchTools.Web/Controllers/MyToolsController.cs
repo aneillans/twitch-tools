@@ -419,7 +419,7 @@ public sealed class MyToolsController(
             && !string.IsNullOrWhiteSpace(streamer.BlueSkyAppPassword);
         if (!isBlueSkyConfigured)
         {
-            TempData["StatusMessage"] = "Configure BlueSky credentials on My Tools before editing stream announcement text.";
+            TempData["StatusMessage"] = "Configure BlueSky credentials on Tools before editing stream announcement text.";
             return RedirectToAction(nameof(LiveAutomation));
         }
 
