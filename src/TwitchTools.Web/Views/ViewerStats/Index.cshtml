@@ -12,7 +12,7 @@
 @if (noProfile)
 {
     <div class="alert alert-info">
-        You have not configured your profile yet. <a asp-controller="MyTools" asp-action="Index">Open My Tools</a> to add your Twitch connection so viewer data can be collected.
+        You have not configured your profile yet. <a asp-controller="MyTools" asp-action="Index">Open Tools</a> to add your Twitch connection so viewer data can be collected.
     </div>
 }
 else if (!Model.Rows.Any())

@@ -9,7 +9,7 @@
 @if (Model.HasProfile != true)
 {
     <div class="alert alert-info">
-        You have not configured your profile yet. <a asp-controller="MyTools" asp-action="Index">Open My Tools</a> to add your connections and automation settings.
+        You have not configured your profile yet. <a asp-controller="MyTools" asp-action="Index">Open Tools</a> to add your connections and automation settings.
     </div>
 }
 
@@ -17,8 +17,19 @@
     <div class="col-md-4">
         <div class="card">
             <div class="card-body">
-                <h5 class="card-title">Streamers</h5>
-                <p class="display-6">@Model.StreamerCount</p>
+                <h5 class="card-title">Automations</h5>
+                <p class="mb-2 d-flex justify-content-between align-items-center gap-2">
+                    <span>BlueSky post when live</span>
+                    <span class="badge @(Model.IsBlueSkyLivePostEnabled ? "bg-success" : "bg-secondary")">
+                        @(Model.IsBlueSkyLivePostEnabled ? "Enabled" : "Disabled")
+                    </span>
+                </p>
+                <p class="mb-0 d-flex justify-content-between align-items-center gap-2">
+                    <span>Discord sync</span>
+                    <span class="badge @(Model.IsDiscordSyncEnabled ? "bg-success" : "bg-secondary")">
+                        @(Model.IsDiscordSyncEnabled ? "Enabled" : "Disabled")
+                    </span>
+                </p>
             </div>
         </div>
     </div>

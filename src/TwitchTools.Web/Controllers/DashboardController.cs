@@ -23,6 +23,14 @@ public sealed class DashboardController(AppDbContext dbContext) : Controller
             .FirstOrDefaultAsync(x => x.OwnerSubject == ownerSubject, cancellationToken);
 
         var streamerId = streamer?.Id;
+        var discordSyncCount = streamerId is null
+            ? 0
+            : await dbContext.DiscordGuildSyncs.CountAsync(x => x.StreamerId == streamerId, cancellationToken);
+
+        var isBlueSkyConfigured = streamer is not null
+            && !string.IsNullOrWhiteSpace(streamer.BlueSkyIdentifier)
+            && !string.IsNullOrWhiteSpace(streamer.BlueSkyAppPassword);
+
         var model = new
         {
             HasProfile = streamer is not null,
@@ -30,9 +38,9 @@ public sealed class DashboardController(AppDbContext dbContext) : Controller
             TimedMessageCount = streamerId is null
                 ? 0
                 : await dbContext.TimedChatMessages.CountAsync(x => x.StreamerId == streamerId, cancellationToken),
-            DiscordSyncCount = streamerId is null
-                ? 0
-                : await dbContext.DiscordGuildSyncs.CountAsync(x => x.StreamerId == streamerId, cancellationToken)
+            DiscordSyncCount = discordSyncCount,
+            IsBlueSkyLivePostEnabled = isBlueSkyConfigured && streamer!.BlueSkyPostOnStreamStart,
+            IsDiscordSyncEnabled = discordSyncCount > 0
         };
 
         return View(model);
