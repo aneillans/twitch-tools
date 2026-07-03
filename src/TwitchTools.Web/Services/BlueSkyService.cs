@@ -7,7 +7,9 @@ namespace TwitchTools.Web.Services;
 
 public sealed class BlueSkyService(
     IBlueSkyApiClient blueSkyApiClient,
+    ITwitchApiClient twitchApiClient,
     IOptions<FeatureFlagsOptions> featureFlags,
+    IOptions<TwitchOptions> twitchOptions,
     ILogger<BlueSkyService> logger) : IBlueSkyService
 {
     private const string DefaultStreamStartedTemplate = "{streamer} is now live on Twitch.";
@@ -40,10 +42,47 @@ public sealed class BlueSkyService(
             logger.LogInformation("Skipping BlueSky post for {Streamer} because posting is disabled for IsLive={IsLive}.", streamer.DisplayName, isLive);
         }
 
+        // Set the live status indicator using the dedicated app.bsky.actor.status record
+        var streamUrl = await GetTwitchStreamUrlAsync(streamer, cancellationToken);
+        await blueSkyApiClient.SetLiveStatusAsync(isLive, streamUrl, durationMinutes: 240, credentials, cancellationToken);
+
+        // Also update the profile for backwards compatibility
         await blueSkyApiClient.UpdateProfileLiveIndicatorAsync(isLive, credentials, cancellationToken);
 
         logger.LogInformation("BlueSky live state published for {Streamer} -> {IsLive}", streamer.DisplayName, isLive);
         return postUri;
+    }
+
+    private async Task<string?> GetTwitchStreamUrlAsync(Streamer streamer, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(streamer.TwitchUserId) || string.IsNullOrWhiteSpace(streamer.TwitchStreamerAccessToken))
+            {
+                return null;
+            }
+
+            var twitchOpts = twitchOptions.Value;
+            if (string.IsNullOrWhiteSpace(twitchOpts.DefaultClientId))
+            {
+                return null;
+            }
+
+            var authContext = new TwitchAuthContext(twitchOpts.DefaultClientId, streamer.TwitchStreamerAccessToken, null, null);
+            var users = await twitchApiClient.GetUsersByIdsAsync(new[] { streamer.TwitchUserId }, authContext, cancellationToken);
+
+            if (users.TryGetValue(streamer.TwitchUserId, out var userProfile) && !string.IsNullOrWhiteSpace(userProfile.UserLogin))
+            {
+                return $"https://twitch.tv/{userProfile.UserLogin}";
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to get Twitch stream URL for streamer {StreamerDisplayName}", streamer.DisplayName);
+            return null;
+        }
     }
 
     private static string BuildPostText(Streamer streamer, bool isLive, TwitchStreamStatus streamStatus)
