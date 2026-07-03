@@ -181,6 +181,106 @@ public sealed class BlueSkyApiClient(
         }
     }
 
+    public async Task SetLiveStatusAsync(bool isLive, string? streamUrl = null, int durationMinutes = 120, BlueSkyCredentials? credentials = null, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var session = await CreateSessionAsync(credentials ?? new BlueSkyCredentials(string.Empty, string.Empty), cancellationToken);
+            if (session is null)
+            {
+                return;
+            }
+
+            if (isLive)
+            {
+                // Create or update the live status record
+                var embed = !string.IsNullOrWhiteSpace(streamUrl)
+                    ? new
+                    {
+                        type = "app.bsky.embed.external",
+                        external = new
+                        {
+                            uri = streamUrl,
+                            title = "Watch Live Stream",
+                            description = "Currently streaming on Twitch"
+                        }
+                    }
+                    : null;
+
+                var statusRecord = new
+                {
+                    status = "app.bsky.actor.status#live",
+                    embed,
+                    durationMinutes = Math.Min(durationMinutes, 240), // Cap at 4 hours as per atproto limits
+                    createdAt = DateTime.UtcNow.ToString("O")
+                };
+
+                using var request = new HttpRequestMessage(HttpMethod.Post, "xrpc/com.atproto.repo.putRecord");
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessJwt);
+                request.Content = new StringContent(
+                    JsonSerializer.Serialize(new
+                    {
+                        repo = session.Did,
+                        collection = "app.bsky.actor.status",
+                        rkey = "self",
+                        record = statusRecord
+                    }),
+                    Encoding.UTF8,
+                    "application/json");
+
+                using var response = await httpClient.SendAsync(request, cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorBody = await ReadResponseBodyForLogsAsync(response, cancellationToken);
+                    logger.LogWarning(
+                        "BlueSky live status set failed for {Identifier} with {StatusCode}. Response: {ResponseBody}",
+                        MaskIdentifier(credentials?.Identifier),
+                        response.StatusCode,
+                        errorBody);
+                }
+                else
+                {
+                    logger.LogInformation("BlueSky live status set successfully for {Identifier}", MaskIdentifier(credentials?.Identifier));
+                }
+            }
+            else
+            {
+                // Delete the live status record by sending a DELETE request
+                using var request = new HttpRequestMessage(HttpMethod.Post, "xrpc/com.atproto.repo.deleteRecord");
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessJwt);
+                request.Content = new StringContent(
+                    JsonSerializer.Serialize(new
+                    {
+                        repo = session.Did,
+                        collection = "app.bsky.actor.status",
+                        rkey = "self"
+                    }),
+                    Encoding.UTF8,
+                    "application/json");
+
+                using var response = await httpClient.SendAsync(request, cancellationToken);
+                if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
+                {
+                    var errorBody = await ReadResponseBodyForLogsAsync(response, cancellationToken);
+                    logger.LogWarning(
+                        "BlueSky live status clear failed for {Identifier} with {StatusCode}. Response: {ResponseBody}",
+                        MaskIdentifier(credentials?.Identifier),
+                        response.StatusCode,
+                        errorBody);
+                }
+                else
+                {
+                    logger.LogInformation("BlueSky live status cleared successfully for {Identifier}", MaskIdentifier(credentials?.Identifier));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected BlueSky live status update error for {Identifier}.", MaskIdentifier(credentials?.Identifier));
+            ExceptionlessClient.Default.SubmitException(ex);
+        }
+    }
+
     public async Task<bool> TestConnectionAsync(BlueSkyCredentials credentials, CancellationToken cancellationToken)
     {
         try

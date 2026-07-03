@@ -4,6 +4,7 @@ public interface IBlueSkyApiClient
 {
     Task<string?> PublishLiveStatePostAsync(string postText, BlueSkyCredentials credentials, CancellationToken cancellationToken);
     Task UpdateProfileLiveIndicatorAsync(bool isLive, BlueSkyCredentials credentials, CancellationToken cancellationToken);
+    Task SetLiveStatusAsync(bool isLive, string? streamUrl = null, int durationMinutes = 120, BlueSkyCredentials? credentials = null, CancellationToken cancellationToken = default);
     Task<bool> TestConnectionAsync(BlueSkyCredentials credentials, CancellationToken cancellationToken);
 }
 
