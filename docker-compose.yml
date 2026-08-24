@@ -68,11 +68,30 @@ services:
       FeatureFlags__EnableEventSubIngressLogging: ${FEATURE_ENABLE_EVENTSUB_INGRESS_LOGGING:-false}
       FeatureFlags__EnableEventSubPayloadLogging: ${FEATURE_ENABLE_EVENTSUB_PAYLOAD_LOGGING:-false}
       FeatureFlags__EventSubPayloadRetentionDays: ${FEATURE_EVENTSUB_PAYLOAD_RETENTION_DAYS:-14}
+      Site__SupportContactEmail: ${SITE_SUPPORT_CONTACT_EMAIL:-}
+      # Standard OTel SDK environment variables - default to the local otel-collector service
+      # below. Override OTEL_EXPORTER_OTLP_ENDPOINT to point at whatever OTel collector /
+      # OpenSearch Data Prepper pipeline is already running in your environment instead.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: twitchtools-otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./docker/otel/config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
 
 volumes:
   postgres-data:

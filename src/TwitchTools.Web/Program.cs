@@ -1,4 +1,3 @@
-using Exceptionless;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -10,6 +9,7 @@ using System.Text.Json;
 using TwitchTools.Web;
 using TwitchTools.Web.Background;
 using TwitchTools.Web.Data;
+using TwitchTools.Web.Extensions;
 using TwitchTools.Web.Options;
 using TwitchTools.Web.Services;
 using TwitchTools.Web.Services.Clients;
@@ -28,6 +28,7 @@ builder.Services.Configure<BlueSkyOptions>(builder.Configuration.GetSection(Blue
 builder.Services.Configure<DiscordOptions>(builder.Configuration.GetSection(DiscordOptions.SectionName));
 builder.Services.Configure<EncryptionOptions>(builder.Configuration.GetSection(EncryptionOptions.SectionName));
 builder.Services.Configure<FeatureFlagsOptions>(builder.Configuration.GetSection(FeatureFlagsOptions.SectionName));
+builder.Services.Configure<SiteOptions>(builder.Configuration.GetSection(SiteOptions.SectionName));
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
@@ -98,8 +99,9 @@ builder.Services.AddTemplateDbContext<AppDbContext>(builder.Configuration, optio
     // Keep any project-specific EF options here (if needed).
 });
 
-builder.Services.AddExceptionless(builder.Configuration);
 builder.Services.AddSingleton<IDataEncryptionService, AesDataEncryptionService>();
+
+builder.Services.AddTwitchToolsTelemetry("twitch-tools-web");
 
 builder.Services.AddHttpClient<ITwitchApiClient, TwitchApiClient>((sp, client) =>
 {
@@ -147,42 +149,18 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseExceptionless();
-
-var exceptionlessClient = app.Services.GetRequiredService<ExceptionlessClient>();
-var exceptionlessConfig = exceptionlessClient.Configuration;
 var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
-ConfigureGlobalExceptionForwarding(exceptionlessClient, startupLogger);
-
-var exceptionlessStoragePath =
-    Environment.GetEnvironmentVariable("EXCEPTIONLESS_STORAGE_PATH")
-    ?? Path.Combine(Path.GetTempPath(), "exceptionless");
-
-Directory.CreateDirectory(exceptionlessStoragePath);
-exceptionlessConfig.UseFolderStorage(exceptionlessStoragePath);
-exceptionlessConfig.UseTraceLogger(Exceptionless.Logging.LogLevel.Trace);
-exceptionlessConfig.SetDefaultMinLogLevel(Exceptionless.Logging.LogLevel.Trace);
+ConfigureGlobalExceptionForwarding(startupLogger);
 
 var configuredFeatureFlags = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<FeatureFlagsOptions>>().Value;
 StartupLog.LogFeatureFlagEnableEventSubIngressLogging(startupLogger, configuredFeatureFlags.EnableEventSubIngressLogging);
 
 if (startupLogger.IsEnabled(LogLevel.Information))
 {
-    StartupLog.LogExceptionlessServerUrl(startupLogger, exceptionlessConfig.ServerUrl);
-    var exceptionlessApiKeyConfigured = !string.IsNullOrWhiteSpace(exceptionlessConfig.ApiKey);
-    StartupLog.LogExceptionlessApiKeyConfigured(startupLogger, exceptionlessApiKeyConfigured);
-    StartupLog.LogExceptionlessEnabled(startupLogger, exceptionlessConfig.IsValid);
-    var storageImpl = exceptionlessConfig.Resolver.Resolve(typeof(Exceptionless.Storage.IObjectStorage));
-    StartupLog.LogExceptionlessStorageImplementation(startupLogger, storageImpl?.GetType().FullName ?? "<unknown>");
-    StartupLog.LogExceptionlessLocalStoragePath(startupLogger, exceptionlessStoragePath);
+    StartupLog.LogOpenTelemetryConfigured(startupLogger, "twitch-tools-web");
 
     var configuredTwitchOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<TwitchOptions>>().Value;
     StartupLog.LogConfiguredTwitchEventSubCallbackUrl(startupLogger, configuredTwitchOptions.EventSubCallbackUrl);
-}
-
-if (!Directory.Exists(exceptionlessStoragePath))
-{
-    StartupLog.LogExceptionlessLocalStorageDirectoryMissing(startupLogger, exceptionlessStoragePath);
 }
 
 app.UseForwardedHeaders();
@@ -351,13 +329,13 @@ static void AddRolesFromJwt(ClaimsIdentity identity, string? jwt, string clientI
             }
         }
     }
-    catch (FormatException ex)
+    catch (FormatException)
     {
-        ExceptionlessClient.Default.SubmitException(ex);
+        // Ignore malformed JWT payloads; role claims from this source are best-effort.
     }
-    catch (JsonException ex)
+    catch (JsonException)
     {
-        ExceptionlessClient.Default.SubmitException(ex);
+        // Ignore malformed JWT payloads; role claims from this source are best-effort.
     }
 }
 
@@ -449,13 +427,12 @@ static IEnumerable<string> GetGroupRoleCandidates(string? rawGroup)
     }
 }
 
-static void ConfigureGlobalExceptionForwarding(ExceptionlessClient exceptionlessClient, ILogger startupLogger)
+static void ConfigureGlobalExceptionForwarding(ILogger startupLogger)
 {
     AppDomain.CurrentDomain.UnhandledException += (_, args) =>
     {
         if (args.ExceptionObject is Exception ex)
         {
-            exceptionlessClient.SubmitException(ex);
             StartupLog.LogUnhandledAppDomainExceptionCaptured(startupLogger, ex, args.IsTerminating);
             return;
         }
@@ -465,7 +442,6 @@ static void ConfigureGlobalExceptionForwarding(ExceptionlessClient exceptionless
 
     TaskScheduler.UnobservedTaskException += (_, args) =>
     {
-        exceptionlessClient.SubmitException(args.Exception);
         StartupLog.LogUnobservedTaskExceptionCaptured(startupLogger, args.Exception);
         args.SetObserved();
     };

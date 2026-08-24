@@ -1,4 +1,3 @@
-using Exceptionless;
 using TwitchTools.Web.Services;
 
 namespace TwitchTools.Web.Background;
@@ -22,7 +21,6 @@ public sealed class ViewerMonitoringBackgroundService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Viewer monitoring cycle failed.");
-                ExceptionlessClient.Default.SubmitException(ex);
             }
 
             await Task.Delay(Interval, stoppingToken);

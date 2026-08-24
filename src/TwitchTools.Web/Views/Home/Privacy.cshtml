@@ -1,6 +1,209 @@
-﻿@{
+@{
     ViewData["Title"] = "Privacy Policy";
+    var retentionDays = ViewData["EventSubPayloadRetentionDays"] as int? ?? 14;
+    var supportContactEmail = ViewData["SupportContactEmail"] as string;
 }
-<h1>@ViewData["Title"]</h1>
 
-<p>Use this page to detail your site's privacy policy.</p>
+<h1 class="mb-1">@ViewData["Title"]</h1>
+<p class="text-muted">Last updated: @DateTime.UtcNow.ToString("MMMM d, yyyy")</p>
+
+<div class="alert alert-secondary">
+    This policy explains what information Twitch Tools ("we", "us", "the Service") collects when you connect your
+    Twitch, Discord, or Bluesky accounts, why we collect it, and how it is stored and protected. It applies to
+    streamers who sign in to the Service ("you", "streamer") as well as to viewers whose public chat activity is
+    observed while using the Service's viewer tracking features.
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">1. Who We Are</div>
+    <div class="card-body">
+        <p class="mb-0">
+            Twitch Tools is a self-hosted suite of tools for streamers, including overlays, timed chat
+            messages, EventSub-driven notifications, viewer watch-time statistics, and optional Discord and Bluesky
+            integrations.
+        </p>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">2. Information We Collect</div>
+    <div class="card-body">
+        <h5>Account &amp;amp; Sign-in Data</h5>
+        <p>
+            When you sign in via our identity provider (Keycloak), we receive and store your unique subject
+            identifier and, where provided, your email address, so we can associate your streamer profile and
+            settings with your account.
+        </p>
+
+        <h5>Twitch Connection Data</h5>
+        <p>
+            When you connect your Twitch account (and optionally a separate bot account), we store your Twitch user
+            ID, client ID, and OAuth access/refresh tokens. These tokens are <strong>encrypted at rest</strong> and
+            are used only to call the Twitch API on your behalf &mdash; for example, to read chat, send messages,
+            check stream status, and register EventSub subscriptions.
+        </p>
+
+        <h5>Viewer Statistics</h5>
+        <p>
+            While you are live, the Service periodically records which Twitch accounts are present in your chat and
+            accumulates their total watch time. We store the viewer's Twitch user ID and total seconds watched per
+            stream session &mdash; we do <em>not</em> store viewers' chat message content. Viewer display names are
+            resolved on demand from the Twitch API and are not persisted. Streamers can identify and exclude known
+            bot accounts (e.g. chat bots such as Nightbot or StreamElements) from these statistics; a list of known
+            bot accounts is maintained centrally by the Service administrator and is not personal data about any
+            individual streamer or viewer.
+        </p>
+
+        <h5>Chat, Follower &amp;amp; Subscriber Events</h5>
+        <p>
+            We store records of live/offline transitions, new followers, and new subscribers (Twitch user ID,
+            login, and display name where available) so we can drive overlays and social-media announcements, and we
+            keep a log of timed chat messages you configure.
+        </p>
+
+        <h5>EventSub Diagnostic Payloads</h5>
+        <p>
+            If enabled, raw Twitch EventSub webhook payloads may be logged for troubleshooting purposes. When
+            enabled, these are retained for @retentionDays day@(retentionDays == 1 ? "" : "s") before being purged,
+            based on the Service's configured retention setting. However, this is only enabled when required.
+        </p>
+
+        <h5>Discord Integration</h5>
+        <p>
+            If you connect Discord, we store the Discord guild (server) ID and schedule-sync configuration needed to
+            keep your Discord server's events in sync with your Twitch schedule.
+        </p>
+
+        <h5>Bluesky Integration</h5>
+        <p>
+            If you connect Bluesky, we store your Bluesky identifier and app password (encrypted at rest) solely to
+            post "going live" / "stream ended" announcements on your behalf, along with the post templates you
+            configure.
+        </p>
+
+        <h5>Custom Overlays</h5>
+        <p>
+            Any custom overlay HTML, CSS, JavaScript, and field data you create is stored so it can be rendered by
+            your browser source in your streaming software.
+        </p>
+
+        <h5>Technical Data</h5>
+        <p class="mb-0">
+            Like most web applications, our hosting and error-monitoring infrastructure may automatically log
+            request metadata (such as IP address, timestamps, and error details) for security and diagnostic
+            purposes.
+        </p>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">3. How We Use Information</div>
+    <div class="card-body">
+        <ul class="mb-0">
+            <li>To authenticate you and operate your streamer dashboard.</li>
+            <li>To call the Twitch, Discord, and Bluesky APIs on your behalf for the features you enable.</li>
+            <li>To display viewer watch-time statistics and overlays to you.</li>
+            <li>To diagnose and fix problems with EventSub notifications and other integrations.</li>
+            <li>To maintain the security and integrity of the Service.</li>
+        </ul>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">4. Legal Basis &amp;amp; Viewer Data</div>
+    <div class="card-body">
+        <p class="mb-0">
+            Streamer account data is processed on the basis of your consent when you connect an account and your
+            ongoing use of the Service. Viewer watch-time data is derived from publicly visible Twitch chat presence
+            and is processed on the basis of the streamer's legitimate interest in understanding their own audience.
+            Viewers do not create accounts with the Service and cannot be contacted by us directly; requests to
+            access or remove viewer watch-time data should be directed to the relevant streamer, who can delete this
+            data from their dashboard or by contacting the Service administrator.
+        </p>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">5. Sharing of Information</div>
+    <div class="card-body">
+        <p>We do not sell your data. We share information only:</p>
+        <ul class="mb-0">
+            <li>With Twitch, Discord, and Bluesky, as required to operate the integrations you enable.</li>
+            <li>Where required by law or to protect the rights, property, or safety of the Service, its users, or others.</li>
+        </ul>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">6. Data Retention</div>
+    <div class="card-body">
+        <p class="mb-0">
+            We retain streamer profile, connection, and statistics data for as long as your account remains
+            connected to the Service, plus a reasonable period thereafter for backups and legal compliance.
+            EventSub diagnostic payloads (if logging is enabled) are retained for @retentionDays day@(retentionDays == 1 ? "" : "s")
+            and then automatically deleted. You may disconnect integrations or request deletion of your account and
+            associated data at any time.
+        </p>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">7. Security</div>
+    <div class="card-body">
+        <p class="mb-0">
+            Sensitive credentials &mdash; including Twitch OAuth tokens and Bluesky app passwords &mdash; are
+            encrypted at rest. Access to the administration area is restricted to authorised administrators. No
+            method of transmission or storage is 100% secure, and we cannot guarantee absolute security.
+        </p>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">8. Your Rights &amp; Choices</div>
+    <div class="card-body">
+        <p class="mb-0">
+            Depending on your location, you may have rights to access, correct, export, or delete your personal
+            data, and to withdraw consent by disconnecting a service. You can manage most of your connections and
+            data directly from the Tools section of the dashboard, or contact us using the details in Section 1 to
+            make a request.
+        </p>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">9. Children's Privacy</div>
+    <div class="card-body">
+        <p class="mb-0">
+            The Service is intended for use by Twitch streamers and is not directed at children. We do not
+            knowingly collect personal data from children under the age required by Twitch's own terms of service.
+        </p>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">10. Changes to This Policy</div>
+    <div class="card-body">
+        <p class="mb-0">
+            We may update this policy from time to time. Material changes will be reflected by updating the "Last
+            updated" date at the top of this page.
+        </p>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">11. Contact Us</div>
+    <div class="card-body">
+        <p class="mb-0">
+            If you have questions about this policy or wish to exercise your data rights, please contact
+            @if (!string.IsNullOrWhiteSpace(supportContactEmail))
+            {
+                <a href="mailto:@supportContactEmail">@supportContactEmail</a>
+            }
+            else
+            {
+                <code>[operator contact email]</code>
+            }
+            .
+        </p>
+    </div>
+</div>

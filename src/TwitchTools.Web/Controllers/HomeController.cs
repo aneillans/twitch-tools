@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using TwitchTools.Web.Models;
+using TwitchTools.Web.Options;
 
 namespace TwitchTools.Web.Controllers;
 
-public class HomeController : Controller
+public class HomeController(IOptions<FeatureFlagsOptions> featureFlags, IOptions<SiteOptions> siteOptions) : Controller
 {
     [HttpGet]
     public IActionResult Index()
@@ -15,6 +17,8 @@ public class HomeController : Controller
     [HttpGet]
     public IActionResult Privacy()
     {
+        ViewData["EventSubPayloadRetentionDays"] = featureFlags.Value.EventSubPayloadRetentionDays;
+        ViewData["SupportContactEmail"] = siteOptions.Value.SupportContactEmail;
         return View();
     }
 

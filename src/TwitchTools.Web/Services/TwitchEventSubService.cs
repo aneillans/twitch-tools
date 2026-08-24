@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Exceptionless;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TwitchTools.Web.Data;
@@ -779,7 +778,6 @@ public sealed class TwitchEventSubService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Discord schedule sync failed on live transition for {Streamer}.", streamer.DisplayName);
-            ExceptionlessClient.Default.SubmitException(ex);
         }
     }
 
