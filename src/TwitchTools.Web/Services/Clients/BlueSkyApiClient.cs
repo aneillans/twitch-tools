@@ -2,7 +2,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Exceptionless;
 using Microsoft.Extensions.Options;
 using TwitchTools.Web.Options;
 
@@ -58,7 +57,6 @@ public sealed class BlueSkyApiClient(
         catch (Exception ex)
         {
             logger.LogError(ex, "Unexpected BlueSky publish error for {Identifier}.", MaskIdentifier(credentials.Identifier));
-            ExceptionlessClient.Default.SubmitException(ex);
             return null;
         }
     }
@@ -127,7 +125,6 @@ public sealed class BlueSkyApiClient(
         catch (Exception ex)
         {
             logger.LogError(ex, "Unexpected BlueSky profile update error for {Identifier}.", MaskIdentifier(credentials.Identifier));
-            ExceptionlessClient.Default.SubmitException(ex);
         }
     }
 
@@ -176,7 +173,6 @@ public sealed class BlueSkyApiClient(
         catch (Exception ex)
         {
             logger.LogError(ex, "BlueSky session creation threw for {Identifier}.", MaskIdentifier(normalizedIdentifier));
-            ExceptionlessClient.Default.SubmitException(ex);
             return null;
         }
     }
@@ -277,7 +273,6 @@ public sealed class BlueSkyApiClient(
         catch (Exception ex)
         {
             logger.LogError(ex, "Unexpected BlueSky live status update error for {Identifier}.", MaskIdentifier(credentials?.Identifier));
-            ExceptionlessClient.Default.SubmitException(ex);
         }
     }
 
@@ -298,7 +293,6 @@ public sealed class BlueSkyApiClient(
         catch (Exception ex)
         {
             logger.LogError(ex, "BlueSky connection test crashed for {Identifier}.", MaskIdentifier(credentials.Identifier));
-            ExceptionlessClient.Default.SubmitException(ex);
             return false;
         }
     }

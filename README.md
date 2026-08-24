@@ -17,7 +17,7 @@ It provides:
 - PostgreSQL
 - EF Core (Npgsql)
 - Keycloak (OIDC authentication)
-- Exceptionless (error/event reporting)
+- OpenTelemetry (traces/metrics/logs, exported via OTLP)
 
 ## Project Layout
 
@@ -137,8 +137,14 @@ Important sections:
   - Environment variable override: `FeatureFlags__EnableEventSubPayloadLogging=true`.
   - `EventSubPayloadRetentionDays` controls automatic cleanup of old EventSub payload debug rows; default is `14` days. Set `0` or a negative value to disable automatic pruning.
   - Environment variable override: `FeatureFlags__EventSubPayloadRetentionDays=14`.
-- `Exceptionless`
-  - API key and server URL.
+- `Site`
+  - `SupportContactEmail` shown on the Privacy Policy page.
+  - Environment variable override: `Site__SupportContactEmail`.
+- `OpenTelemetry`
+  - Always-on instrumentation (traces, metrics, and structured logs) for ASP.NET Core requests, outbound HTTP calls, and .NET runtime metrics; `service.name` is fixed to `twitch-tools-web`.
+  - Exporter destination/protocol/headers are configured via the standard OTel SDK environment variables (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_EXPORTER_OTLP_HEADERS`) so this can be pointed at any existing OTel collector or OpenSearch Data Prepper OTLP pipeline without code changes.
+  - `docker-compose.yml` runs a local, self-contained `otel-collector` (config at `docker/otel/config.yaml`) that just prints telemetry to its own logs (`docker compose logs otel-collector`) - handy for confirming instrumentation works without any OpenSearch dependency. Override `OTEL_EXPORTER_OTLP_ENDPOINT` to forward to a real collector/Data Prepper pipeline instead.
+  - Note: `IncludeScopes` is deliberately left `false` for the log exporter - ASP.NET Core's nested logging scopes repeat the same attribute keys (e.g. `HttpMethod`), and OTLP-based backends such as OpenSearch Data Prepper reject the entire log record on a duplicate attribute key.
 
 ## Authentication and Roles
 

@@ -1,4 +1,3 @@
-using Exceptionless;
 using Microsoft.EntityFrameworkCore;
 using TwitchTools.Web.Data;
 using TwitchTools.Web.Domain;
@@ -55,7 +54,6 @@ public sealed class DiscordScheduleRefreshBackgroundService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Discord schedule refresh cycle failed.");
-                ExceptionlessClient.Default.SubmitException(ex);
             }
 
             await Task.Delay(Interval, stoppingToken);
@@ -77,7 +75,6 @@ public sealed class DiscordScheduleRefreshBackgroundService(
         {
             RegisterDiscordRefreshFailure(streamer.Id, now);
             logger.LogError(ex, "Discord schedule sync failed for {Streamer}.", streamer.DisplayName);
-            ExceptionlessClient.Default.SubmitException(ex);
         }
     }
 

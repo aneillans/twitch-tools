@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Exceptionless;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -312,7 +311,6 @@ public sealed class MyToolsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Twitch OAuth callback failed.");
-            ExceptionlessClient.Default.SubmitException(ex);
             TempData["StatusMessage"] = "Twitch connection failed unexpectedly.";
             return RedirectToAction(nameof(Index));
         }
@@ -371,13 +369,11 @@ public sealed class MyToolsController(
         catch (HttpRequestException ex)
         {
             logger.LogError(ex, "BlueSky connection test failed for streamer {StreamerId}.", streamer.Id);
-            ExceptionlessClient.Default.SubmitException(ex);
             TempData["StatusMessage"] = "BlueSky connection failed unexpectedly. The error has been captured for review.";
         }
         catch (JsonException ex)
         {
             logger.LogError(ex, "BlueSky connection test failed for streamer {StreamerId}.", streamer.Id);
-            ExceptionlessClient.Default.SubmitException(ex);
             TempData["StatusMessage"] = "BlueSky connection failed unexpectedly. The error has been captured for review.";
         }
 
@@ -484,7 +480,6 @@ public sealed class MyToolsController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Manual Discord sync failed for guild {GuildId}.", sync.GuildId);
-            ExceptionlessClient.Default.SubmitException(ex);
             TempData["StatusMessage"] = $"Discord sync failed for server {sync.GuildId}. Check logs for details.";
         }
 
