@@ -18,7 +18,7 @@ public sealed class ViewerStatsController(
     private const int PageSize = 100;
 
     [HttpGet("/viewer-stats")]
-    public async Task<IActionResult> Index(int page = 1, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Index(int page = 1, bool includeBots = false, CancellationToken cancellationToken = default)
     {
         var ownerSubject = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
         if (string.IsNullOrWhiteSpace(ownerSubject))
@@ -36,9 +36,19 @@ public sealed class ViewerStatsController(
             return View(new ViewerStatsViewModel());
         }
 
+        // Known bots are excluded by default; the viewer can opt back in via the "includeBots" toggle.
+        var knownBotIds = includeBots
+            ? []
+            : await dbContext.KnownBots
+                .AsNoTracking()
+                .Select(x => x.TwitchUserId)
+                .ToListAsync(cancellationToken);
+
+        var baseQuery = dbContext.ViewerDurationSamples
+            .Where(x => x.StreamerId == streamer.Id && !knownBotIds.Contains(x.TwitchViewerId));
+
         // Use the max (latest cumulative) total per viewer to get aggregate watch time.
-        var totalViewers = await dbContext.ViewerDurationSamples
-            .Where(x => x.StreamerId == streamer.Id)
+        var totalViewers = await baseQuery
             .Select(x => x.TwitchViewerId)
             .Distinct()
             .CountAsync(cancellationToken);
@@ -46,8 +56,7 @@ public sealed class ViewerStatsController(
         var currentPage = Math.Max(1, page);
         var skip = (currentPage - 1) * PageSize;
 
-        var rows = await dbContext.ViewerDurationSamples
-            .Where(x => x.StreamerId == streamer.Id)
+        var rows = await baseQuery
             .GroupBy(x => x.TwitchViewerId)
             .Select(g => new ViewerStatRow
             {
@@ -63,6 +72,7 @@ public sealed class ViewerStatsController(
 
         ViewData["CurrentPage"] = currentPage;
         ViewData["TotalPages"] = (int)Math.Ceiling(totalViewers / (double)PageSize);
+        ViewData["IncludeBots"] = includeBots;
 
         return View(new ViewerStatsViewModel
         {

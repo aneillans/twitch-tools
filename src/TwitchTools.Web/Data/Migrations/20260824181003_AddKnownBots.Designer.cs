@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TwitchTools.Web.Data;
@@ -11,9 +12,11 @@ using TwitchTools.Web.Data;
 namespace TwitchTools.Web.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260824181003_AddKnownBots")]
+    partial class AddKnownBots
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -123,56 +126,6 @@ namespace TwitchTools.Web.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("KnownBots");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = -1,
-                            CreatedUtc = new DateTime(2026, 8, 24, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Login = "own3d",
-                            Notes = "OWN3D chatbot",
-                            TwitchUserId = "566008092"
-                        },
-                        new
-                        {
-                            Id = -2,
-                            CreatedUtc = new DateTime(2026, 8, 24, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Login = "streamerbot",
-                            Notes = "Streamer.bot",
-                            TwitchUserId = "42062292"
-                        },
-                        new
-                        {
-                            Id = -3,
-                            CreatedUtc = new DateTime(2026, 8, 24, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Login = "sery_bot",
-                            Notes = "Sery_Bot",
-                            TwitchUserId = "402337290"
-                        },
-                        new
-                        {
-                            Id = -4,
-                            CreatedUtc = new DateTime(2026, 8, 24, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Login = "streamelements",
-                            Notes = "StreamElements",
-                            TwitchUserId = "100135110"
-                        },
-                        new
-                        {
-                            Id = -5,
-                            CreatedUtc = new DateTime(2026, 8, 24, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Login = "nightbot",
-                            Notes = "Nightbot",
-                            TwitchUserId = "19264788"
-                        },
-                        new
-                        {
-                            Id = -6,
-                            CreatedUtc = new DateTime(2026, 8, 24, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Login = "kofistreambot",
-                            Notes = "Ko-fi Stream Bot",
-                            TwitchUserId = "431199284"
-                        });
                 });
 
             modelBuilder.Entity("TwitchTools.Web.Domain.LiveNotificationEvent", b =>

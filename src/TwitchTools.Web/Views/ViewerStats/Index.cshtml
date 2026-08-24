@@ -4,6 +4,7 @@
     var currentPage = (int)(ViewData["CurrentPage"] ?? 1);
     var totalPages = (int)(ViewData["TotalPages"] ?? 1);
     var noProfile = ViewData["NoProfile"] as bool? == true;
+    var includeBots = ViewData["IncludeBots"] as bool? == true;
 }
 
 <h1>Viewer Stats</h1>
@@ -15,14 +16,26 @@
         You have not configured your profile yet. <a asp-controller="MyTools" asp-action="Index">Open Tools</a> to add your Twitch connection so viewer data can be collected.
     </div>
 }
-else if (!Model.Rows.Any())
-{
-    <div class="alert alert-secondary">
-        No viewer data has been collected yet. Viewer watch time is recorded while you are live. Check back after your next stream.
-    </div>
-}
 else
 {
+    <form method="get" asp-controller="ViewerStats" asp-action="Index" class="mb-3">
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="includeBots" name="includeBots" value="true"
+                   onchange="this.form.submit()" @(includeBots ? "checked" : "") />
+            <label class="form-check-label" for="includeBots">
+                Show known bots (hidden by default)
+            </label>
+        </div>
+    </form>
+
+    if (!Model.Rows.Any())
+    {
+        <div class="alert alert-secondary">
+            No viewer data has been collected yet. Viewer watch time is recorded while you are live. Check back after your next stream.
+        </div>
+    }
+    else
+    {
     <div class="mb-3 text-muted small">@Model.TotalViewers unique viewer@(Model.TotalViewers == 1 ? "" : "s") tracked</div>
 
     <div class="table-responsive">
@@ -81,10 +94,11 @@ else
                 @for (var p = 1; p <= totalPages; p++)
                 {
                     <li class="page-item @(p == currentPage ? "active" : "")">
-                        <a class="page-link" asp-controller="ViewerStats" asp-action="Index" asp-route-page="@p">@p</a>
+                        <a class="page-link" asp-controller="ViewerStats" asp-action="Index" asp-route-page="@p" asp-route-includeBots="@includeBots">@p</a>
                     </li>
                 }
             </ul>
         </nav>
+    }
     }
 }
