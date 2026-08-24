@@ -1,0 +1,85 @@
+@model TwitchTools.Web.Models.AdminKnownBotsViewModel
+@{
+    ViewData["Title"] = "Known Bots";
+}
+
+<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">Known Bots</h1>
+        <p class="text-muted mb-0">
+            Twitch accounts identified here are excluded from the Viewer Stats page by default for all streamers.
+        </p>
+    </div>
+    <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Index">&larr; Admin</a>
+</div>
+
+@if (ViewData["StatusMessage"] is string statusMessage && !string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+        @statusMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-header">Manage Known Bots</div>
+    <div class="card-body">
+        <form asp-controller="Admin" asp-action="KnownBotsAdd" method="post" class="row g-2 mb-3">
+            <div class="col-sm-4">
+                <label class="form-label mb-1" for="twitchUserId">Twitch User ID</label>
+                <input class="form-control" id="twitchUserId" name="TwitchUserId" placeholder="e.g. 19264788" required />
+            </div>
+            <div class="col-sm-4">
+                <label class="form-label mb-1" for="login">Username (optional)</label>
+                <input class="form-control" id="login" name="Login" placeholder="e.g. nightbot" />
+            </div>
+            <div class="col-sm-4">
+                <label class="form-label mb-1" for="notes">Notes (optional)</label>
+                <input class="form-control" id="notes" name="Notes" placeholder="e.g. Chat bot" />
+            </div>
+            <div class="col-12 d-grid d-sm-block">
+                <button class="btn btn-primary" type="submit">Add Known Bot</button>
+            </div>
+        </form>
+
+        @if (!Model.KnownBots.Any())
+        {
+            <p class="text-muted mb-0">No known bots configured yet.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Twitch User ID</th>
+                            <th>Notes</th>
+                            <th>Added</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var bot in Model.KnownBots)
+                    {
+                        <tr>
+                            <td>@(bot.Login ?? "-")</td>
+                            <td class="font-monospace">@bot.TwitchUserId</td>
+                            <td>@(bot.Notes ?? "-")</td>
+                            <td>@bot.CreatedUtc.ToString("yyyy-MM-dd")</td>
+                            <td class="text-end">
+                                <form asp-controller="Admin" asp-action="KnownBotsDelete" asp-route-id="@bot.Id" method="post" class="d-inline">
+                                    <button class="btn btn-sm btn-outline-danger" type="submit"
+                                            onclick="return confirm('Remove this known bot from the list?')">
+                                        Delete
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TwitchTools.Web.Data;
+using TwitchTools.Web.Domain;
 using TwitchTools.Web.Models;
 using TwitchTools.Web.Services;
 
@@ -69,5 +70,79 @@ public sealed class AdminController(AppDbContext dbContext, ITwitchEventSubServi
             ? $"Delete all completed. Deleted {result.DeletedCount}, failed {result.FailedCount}."
             : $"Delete all completed with warnings. Deleted {result.DeletedCount}, failed {result.FailedCount}. {result.Message}";
         return RedirectToAction(nameof(EventSub));
+    }
+
+    [HttpGet("/admin/known-bots")]
+    public async Task<IActionResult> KnownBots(CancellationToken cancellationToken)
+    {
+        var knownBots = await dbContext.KnownBots
+            .AsNoTracking()
+            .OrderBy(x => x.Login ?? x.TwitchUserId)
+            .Select(x => new KnownBotItem
+            {
+                Id = x.Id,
+                TwitchUserId = x.TwitchUserId,
+                Login = x.Login,
+                Notes = x.Notes,
+                CreatedUtc = x.CreatedUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        var model = new AdminKnownBotsViewModel
+        {
+            KnownBots = knownBots
+        };
+
+        ViewData["StatusMessage"] = TempData["StatusMessage"] as string;
+        return View(model);
+    }
+
+    [HttpPost("/admin/known-bots")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> KnownBotsAdd(AddKnownBotInput input, CancellationToken cancellationToken)
+    {
+        var twitchUserId = input.TwitchUserId?.Trim();
+        if (string.IsNullOrWhiteSpace(twitchUserId))
+        {
+            TempData["StatusMessage"] = "A Twitch user ID is required to add a known bot.";
+            return RedirectToAction(nameof(KnownBots));
+        }
+
+        var alreadyExists = await dbContext.KnownBots
+            .AnyAsync(x => x.TwitchUserId == twitchUserId, cancellationToken);
+
+        if (alreadyExists)
+        {
+            TempData["StatusMessage"] = "That Twitch user ID is already in the known bot list.";
+            return RedirectToAction(nameof(KnownBots));
+        }
+
+        dbContext.KnownBots.Add(new KnownBot
+        {
+            TwitchUserId = twitchUserId,
+            Login = string.IsNullOrWhiteSpace(input.Login) ? null : input.Login.Trim(),
+            Notes = string.IsNullOrWhiteSpace(input.Notes) ? null : input.Notes.Trim()
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        TempData["StatusMessage"] = "Known bot added.";
+        return RedirectToAction(nameof(KnownBots));
+    }
+
+    [HttpPost("/admin/known-bots/{id:int}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> KnownBotsDelete(int id, CancellationToken cancellationToken)
+    {
+        var knownBot = await dbContext.KnownBots.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (knownBot is null)
+        {
+            TempData["StatusMessage"] = "Known bot was not found.";
+            return RedirectToAction(nameof(KnownBots));
+        }
+
+        dbContext.KnownBots.Remove(knownBot);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        TempData["StatusMessage"] = "Known bot removed.";
+        return RedirectToAction(nameof(KnownBots));
     }
 }

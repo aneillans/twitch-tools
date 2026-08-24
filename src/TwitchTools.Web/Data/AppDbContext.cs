@@ -9,6 +9,9 @@ public sealed class AppDbContext(
     DbContextOptions<AppDbContext> options,
     IDataEncryptionService encryptionService) : DbContext(options)
 {
+    // Fixed timestamp so migration seeding produces a deterministic, reproducible model snapshot.
+    private static readonly DateTime SeedDate = new(2026, 8, 24, 0, 0, 0, DateTimeKind.Utc);
+
     public DbSet<Streamer> Streamers => Set<Streamer>();
     public DbSet<LiveNotificationEvent> LiveNotificationEvents => Set<LiveNotificationEvent>();
     public DbSet<SubscriberNotificationEvent> SubscriberNotificationEvents => Set<SubscriberNotificationEvent>();
@@ -17,6 +20,7 @@ public sealed class AppDbContext(
     public DbSet<ViewerDurationSample> ViewerDurationSamples => Set<ViewerDurationSample>();
     public DbSet<OverlaySnapshot> OverlaySnapshots => Set<OverlaySnapshot>();
     public DbSet<EventSubDebugMessage> EventSubDebugMessages => Set<EventSubDebugMessage>();
+    public DbSet<KnownBot> KnownBots => Set<KnownBot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -115,6 +119,24 @@ public sealed class AppDbContext(
             entity.Property(x => x.MessageId).HasMaxLength(128);
             entity.Property(x => x.BroadcasterUserId).HasMaxLength(64);
             entity.Property(x => x.Payload);
+        });
+
+        modelBuilder.Entity<KnownBot>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.TwitchUserId).IsUnique();
+            entity.Property(x => x.TwitchUserId).HasMaxLength(64);
+            entity.Property(x => x.Login).HasMaxLength(128);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+
+            // Pre-populate with well-known Twitch chat bots so viewer stats are useful out of the box.
+            entity.HasData(
+                new KnownBot { Id = -1, TwitchUserId = "566008092", Login = "own3d", Notes = "OWN3D chatbot", CreatedUtc = SeedDate },
+                new KnownBot { Id = -2, TwitchUserId = "42062292", Login = "streamerbot", Notes = "Streamer.bot", CreatedUtc = SeedDate },
+                new KnownBot { Id = -3, TwitchUserId = "402337290", Login = "sery_bot", Notes = "Sery_Bot", CreatedUtc = SeedDate },
+                new KnownBot { Id = -4, TwitchUserId = "100135110", Login = "streamelements", Notes = "StreamElements", CreatedUtc = SeedDate },
+                new KnownBot { Id = -5, TwitchUserId = "19264788", Login = "nightbot", Notes = "Nightbot", CreatedUtc = SeedDate },
+                new KnownBot { Id = -6, TwitchUserId = "431199284", Login = "kofistreambot", Notes = "Ko-fi Stream Bot", CreatedUtc = SeedDate });
         });
 
         modelBuilder.Entity<LiveNotificationEvent>()
