@@ -10,6 +10,8 @@ public interface ITwitchEventSubService
         string rawBody,
         CancellationToken cancellationToken);
 
+    Task ProcessQueuedStreamStatusEventAsync(StreamStatusEventWorkItem workItem, CancellationToken cancellationToken);
+
     Task EnsureSubscriberSubscriptionsAsync(CancellationToken cancellationToken);
     Task<EventSubDiagnosticsResult> GetDiagnosticsAsync(CancellationToken cancellationToken);
     Task<EventSubForceResyncResult> ForceResyncSubscriptionsAsync(CancellationToken cancellationToken);

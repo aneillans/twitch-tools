@@ -18,8 +18,13 @@ public sealed class TwitchEventSubService(
     IBlueSkyService blueSkyService,
     IDiscordScheduleSyncService discordScheduleSyncService,
     IOverlayEventBroker overlayEventBroker,
+    IEventSubStreamStatusDispatcher streamStatusDispatcher,
     ILogger<TwitchEventSubService> logger) : ITwitchEventSubService
 {
+    // How long a Twitch-Eventsub-Message-Id is remembered for duplicate detection. Twitch redelivers
+    // notifications for a limited window when it does not receive a timely 2xx response, so this only
+    // needs to comfortably outlast that retry window.
+    private static readonly TimeSpan ProcessedMessageRetention = TimeSpan.FromDays(3);
     private const string ChannelSubscribeType = "channel.subscribe";
     private const string ChannelSubscriptionMessageType = "channel.subscription.message";
     private const string ChannelChatMessageType = "channel.chat.message";
@@ -56,6 +61,20 @@ public sealed class TwitchEventSubService(
         {
             logger.LogWarning("Rejected EventSub webhook because the signature did not match.");
             return new EventSubWebhookResult(StatusCode: StatusCodes.Status403Forbidden);
+        }
+
+        // Twitch redelivers a notification (with the same Twitch-Eventsub-Message-Id) if it does not
+        // receive a timely 2xx response. Claim the message id atomically before doing any further work
+        // so redeliveries are ignored instead of triggering duplicate side effects (e.g. duplicate
+        // BlueSky posts). This is the primary duplicate guard; per-transition checks further down are
+        // only a secondary safety net.
+        if (!await TryClaimMessageAsync(messageId, cancellationToken))
+        {
+            logger.LogInformation(
+                "Ignoring duplicate EventSub delivery. MessageType={MessageType}, MessageId={MessageId}",
+                messageType,
+                messageId);
+            return new EventSubWebhookResult(StatusCode: StatusCodes.Status204NoContent);
         }
 
         await SavePayloadForDebugIfEnabledAsync(messageType, messageId, rawBody, cancellationToken);
@@ -109,15 +128,22 @@ public sealed class TwitchEventSubService(
             return new EventSubWebhookResult(StatusCode: StatusCodes.Status204NoContent);
         }
 
-        if (string.Equals(subscriptionType, StreamOnlineType, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(subscriptionType, StreamOnlineType, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(subscriptionType, StreamOfflineType, StringComparison.OrdinalIgnoreCase))
         {
-            await HandleStreamStatusAsync(notificationDocument.RootElement.GetProperty("event"), isLive: true, cancellationToken);
-            return new EventSubWebhookResult(StatusCode: StatusCodes.Status204NoContent);
-        }
+            var isLive = string.Equals(subscriptionType, StreamOnlineType, StringComparison.OrdinalIgnoreCase);
+            var rawEventJson = notificationDocument.RootElement.GetProperty("event").GetRawText();
 
-        if (string.Equals(subscriptionType, StreamOfflineType, StringComparison.OrdinalIgnoreCase))
-        {
-            await HandleStreamStatusAsync(notificationDocument.RootElement.GetProperty("event"), isLive: false, cancellationToken);
+            // Hand off to a background worker so we can acknowledge Twitch immediately instead of
+            // performing slow downstream work (Twitch API calls, Discord sync, BlueSky posting)
+            // inline with the webhook request, which previously risked Twitch's delivery timing out
+            // and redelivering the notification before we had finished (and before our duplicate
+            // guard had persisted anything).
+            streamStatusDispatcher.Enqueue(new StreamStatusEventWorkItem(isLive, rawEventJson, messageId));
+            logger.LogInformation(
+                "Queued {EventType} notification for background processing. MessageId={MessageId}",
+                isLive ? StreamOnlineType : StreamOfflineType,
+                messageId);
             return new EventSubWebhookResult(StatusCode: StatusCodes.Status204NoContent);
         }
 
@@ -130,6 +156,40 @@ public sealed class TwitchEventSubService(
 
         await RecordSubscriberAsync(notificationDocument.RootElement.GetProperty("event"), cancellationToken);
         return new EventSubWebhookResult(StatusCode: StatusCodes.Status204NoContent);
+    }
+
+    public async Task ProcessQueuedStreamStatusEventAsync(StreamStatusEventWorkItem workItem, CancellationToken cancellationToken)
+    {
+        using var eventDocument = JsonDocument.Parse(workItem.RawEventJson);
+        await HandleStreamStatusAsync(eventDocument.RootElement, workItem.IsLive, cancellationToken);
+    }
+
+    /// <summary>
+    /// Atomically records that a Twitch-Eventsub-Message-Id is being processed. Returns false if the
+    /// message id has already been claimed (i.e. this is a redelivery of a notification we have already
+    /// accepted), in which case the caller should skip processing entirely.
+    /// </summary>
+    private async Task<bool> TryClaimMessageAsync(string messageId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(messageId))
+        {
+            // Without a message id we have no way to deduplicate; allow processing rather than
+            // silently dropping the notification.
+            logger.LogWarning("EventSub webhook received without a Twitch-Eventsub-Message-Id; duplicate detection is not possible for this delivery.");
+            return true;
+        }
+
+        var cutoffUtc = DateTime.UtcNow - ProcessedMessageRetention;
+        await dbContext.ProcessedEventSubMessages
+            .Where(x => x.ProcessedUtc < cutoffUtc)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var rowsInserted = await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""INSERT INTO "ProcessedEventSubMessages" ("MessageId", "ProcessedUtc") VALUES ({messageId}, {now}) ON CONFLICT ("MessageId") DO NOTHING""",
+            cancellationToken);
+
+        return rowsInserted > 0;
     }
 
     public async Task EnsureSubscriberSubscriptionsAsync(CancellationToken cancellationToken)

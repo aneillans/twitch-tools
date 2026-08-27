@@ -20,6 +20,7 @@ public sealed class AppDbContext(
     public DbSet<ViewerDurationSample> ViewerDurationSamples => Set<ViewerDurationSample>();
     public DbSet<OverlaySnapshot> OverlaySnapshots => Set<OverlaySnapshot>();
     public DbSet<EventSubDebugMessage> EventSubDebugMessages => Set<EventSubDebugMessage>();
+    public DbSet<ProcessedEventSubMessage> ProcessedEventSubMessages => Set<ProcessedEventSubMessage>();
     public DbSet<KnownBot> KnownBots => Set<KnownBot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -119,6 +120,13 @@ public sealed class AppDbContext(
             entity.Property(x => x.MessageId).HasMaxLength(128);
             entity.Property(x => x.BroadcasterUserId).HasMaxLength(64);
             entity.Property(x => x.Payload);
+        });
+
+        modelBuilder.Entity<ProcessedEventSubMessage>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.MessageId).IsUnique();
+            entity.Property(x => x.MessageId).HasMaxLength(128);
         });
 
         modelBuilder.Entity<KnownBot>(entity =>

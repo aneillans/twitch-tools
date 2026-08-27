@@ -126,6 +126,7 @@ builder.Services.AddScoped<IDiscordScheduleSyncService, DiscordScheduleSyncServi
 builder.Services.AddScoped<ITimedChatMessageService, TimedChatMessageService>();
 builder.Services.AddScoped<IViewerMonitoringService, ViewerMonitoringService>();
 builder.Services.AddScoped<ITwitchEventSubService, TwitchEventSubService>();
+builder.Services.AddSingleton<IEventSubStreamStatusDispatcher, EventSubStreamStatusDispatcher>();
 builder.Services.AddScoped<IOverlayService, OverlayService>();
 builder.Services.AddSingleton<IOverlayEventBroker, OverlayEventBroker>();
 
@@ -134,6 +135,7 @@ builder.Services.AddHostedService<TimedChatMessageBackgroundService>();
 builder.Services.AddHostedService<TwitchTokenRefreshBackgroundService>();
 builder.Services.AddHostedService<ViewerMonitoringBackgroundService>();
 builder.Services.AddHostedService<TwitchEventSubBackgroundService>();
+builder.Services.AddHostedService<EventSubStreamStatusBackgroundService>();
 
 var app = builder.Build();
 
