@@ -124,6 +124,21 @@ Important sections:
   - `MetadataAddress` can be set for container backchannel scenarios.
 - `Twitch`
   - API base URLs, OAuth client settings, scopes, and redirect URI.
+- `YouTube`
+  - Google OAuth client settings, scopes, and redirect URI for the YouTube Data API v3.
+  - Requires a Google Cloud project with the **YouTube Data API v3** enabled and an OAuth 2.0
+    client (Web application type). Add the redirect URI (`.../my-tools/connect/youtube/callback`)
+    as an authorized redirect URI on that client, and configure an OAuth consent screen requesting
+    the `youtube.readonly` and `youtube.force-ssl` scopes.
+  - `youtube.readonly` and `youtube.force-ssl` are Google-restricted scopes; while the OAuth
+    consent screen is in Testing publishing status this only works for the test users you add in
+    the Google Cloud console. Moving to a verified production app requires Google's OAuth
+    verification process.
+  - `NotLivePollIntervalSeconds` / `MinChatPollIntervalSeconds` control how often the background
+    poller checks for a new live broadcast and, once live, the floor applied to YouTube's own
+    reported chat polling interval. The YouTube Data API has a default quota of 10,000 units/day
+    per Google Cloud project, shared across every streamer connected to this deployment - tune
+    these (or request a quota increase from Google) if you have many concurrently-live streamers.
 - `BlueSky`
   - Service URL and live profile prefix.
 - `Discord`
@@ -131,7 +146,7 @@ Important sections:
 - `Encryption`
   - Salt used by credential encryption at rest.
 - `FeatureFlags`
-  - `DisableExternalPosting` disables outward posting side effects (BlueSky publish/profile updates, Discord event create/update/delete sync, timed Twitch chat sends, EventSub subscription creation).
+  - `DisableExternalPosting` disables outward posting side effects (BlueSky publish/profile updates, Discord event create/update/delete sync, timed Twitch chat sends, EventSub subscription creation, YouTube live chat sends, and Twitch/YouTube chat cross-posting).
   - Environment variable override: `FeatureFlags__DisableExternalPosting=true`.
   - `EnableEventSubPayloadLogging` logs full EventSub request payloads (including chat message events) for debug tracing.
   - Environment variable override: `FeatureFlags__EnableEventSubPayloadLogging=true`.
@@ -163,8 +178,11 @@ After login:
 1. Go to My Tools (`/my-tools`).
 2. Save streamer profile values.
 3. Connect Twitch via OAuth (if configured).
-4. Configure timed chat messages.
-5. Add Discord sync target:
+4. Optionally connect YouTube via OAuth to merge YouTube live chat into the overlay widget feed.
+5. Optionally connect a Twitch bot account and a YouTube bot account, then enable chat
+   cross-posting on the Live Automation page.
+6. Configure timed chat messages.
+7. Add Discord sync target:
    - Use the in-app Invite Discord Bot button first.
    - Paste a full Discord channel URL (recommended), or enter guild/channel IDs manually.
 
@@ -175,6 +193,26 @@ Overlay is anonymous by design for OBS/browser source usage:
 - `/overlay/{token}`
 
 Each streamer has a unique overlay token.
+
+### Merged Twitch + YouTube chat feed
+
+The custom widget overlay's SSE event stream (`/overlay/widgets/{token}/events`) carries chat
+messages from Twitch (via EventSub) and, once a streamer connects YouTube, from YouTube live chat
+(polled in the background - YouTube has no webhook/push equivalent of Twitch EventSub for chat).
+Both publish onto the same per-streamer stream, so a custom widget sees one merged feed while both
+platforms are live. Each published message includes a top-level `platform` field (`"twitch"` or
+`"youtube"`) alongside the existing `listener`/`event` fields, so custom widget JS can style or
+filter by source if it wants to; existing widgets that only read `event.data` are unaffected.
+
+### Twitch ↔ YouTube chat cross-posting
+
+Streamers can optionally mirror chat messages between Twitch and YouTube using a dedicated bot
+account on each platform (Live Automation page). This requires connecting *both* a Twitch bot
+account and a YouTube bot account first. Mirrored messages are prefixed with a configurable
+template (default `[{platform}] {user}: {message}`) since the bot can't post as the original
+author. A message authored by the streamer's own configured bot identity on either platform is
+never mirrored again and never republished into the merged overlay feed, which is what prevents
+both an infinite mirror loop and duplicate lines showing up in the widget.
 
 ## Useful Commands
 

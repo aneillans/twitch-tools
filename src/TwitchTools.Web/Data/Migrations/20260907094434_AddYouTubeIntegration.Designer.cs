@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TwitchTools.Web.Data;
@@ -11,9 +12,11 @@ using TwitchTools.Web.Data;
 namespace TwitchTools.Web.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260907094434_AddYouTubeIntegration")]
+    partial class AddYouTubeIntegration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -548,41 +551,6 @@ namespace TwitchTools.Web.Data.Migrations
                     b.ToTable("ViewerDurationSamples");
                 });
 
-            modelBuilder.Entity("TwitchTools.Web.Domain.ViewerIdentityLink", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("StreamerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TwitchViewerId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("YouTubeViewerId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StreamerId", "TwitchViewerId")
-                        .IsUnique();
-
-                    b.HasIndex("StreamerId", "YouTubeViewerId")
-                        .IsUnique();
-
-                    b.ToTable("ViewerIdentityLinks");
-                });
-
             modelBuilder.Entity("TwitchTools.Web.Domain.YouTubeLiveState", b =>
                 {
                     b.Property<long>("Id")
@@ -621,53 +589,6 @@ namespace TwitchTools.Web.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("YouTubeLiveStates");
-                });
-
-            modelBuilder.Entity("TwitchTools.Web.Domain.YouTubeViewerDurationSample", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime>("CapturedUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("FirstSeenUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("LastSeenUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("SessionBaseSeconds")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("StreamerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("TotalSecondsWatched")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("VideoId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("YouTubeViewerDisplayName")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("YouTubeViewerId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StreamerId", "YouTubeViewerId", "CapturedUtc");
-
-                    b.ToTable("YouTubeViewerDurationSamples");
                 });
 
             modelBuilder.Entity("TwitchTools.Web.Domain.DiscordGuildSync", b =>
@@ -746,33 +667,11 @@ namespace TwitchTools.Web.Data.Migrations
                     b.Navigation("Streamer");
                 });
 
-            modelBuilder.Entity("TwitchTools.Web.Domain.ViewerIdentityLink", b =>
-                {
-                    b.HasOne("TwitchTools.Web.Domain.Streamer", "Streamer")
-                        .WithMany()
-                        .HasForeignKey("StreamerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Streamer");
-                });
-
             modelBuilder.Entity("TwitchTools.Web.Domain.YouTubeLiveState", b =>
                 {
                     b.HasOne("TwitchTools.Web.Domain.Streamer", "Streamer")
                         .WithOne("YouTubeLiveState")
                         .HasForeignKey("TwitchTools.Web.Domain.YouTubeLiveState", "StreamerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Streamer");
-                });
-
-            modelBuilder.Entity("TwitchTools.Web.Domain.YouTubeViewerDurationSample", b =>
-                {
-                    b.HasOne("TwitchTools.Web.Domain.Streamer", "Streamer")
-                        .WithMany()
-                        .HasForeignKey("StreamerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

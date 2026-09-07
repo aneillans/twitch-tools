@@ -22,6 +22,9 @@ public sealed class AppDbContext(
     public DbSet<EventSubDebugMessage> EventSubDebugMessages => Set<EventSubDebugMessage>();
     public DbSet<ProcessedEventSubMessage> ProcessedEventSubMessages => Set<ProcessedEventSubMessage>();
     public DbSet<KnownBot> KnownBots => Set<KnownBot>();
+    public DbSet<YouTubeLiveState> YouTubeLiveStates => Set<YouTubeLiveState>();
+    public DbSet<YouTubeViewerDurationSample> YouTubeViewerDurationSamples => Set<YouTubeViewerDurationSample>();
+    public DbSet<ViewerIdentityLink> ViewerIdentityLinks => Set<ViewerIdentityLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +55,17 @@ public sealed class AppDbContext(
             entity.Property(x => x.TwitchBotUserId).HasMaxLength(64);
             entity.Property(x => x.TwitchBotAccessToken).HasMaxLength(2048).HasConversion(encryptedNullableString);
             entity.Property(x => x.TwitchBotRefreshToken).HasMaxLength(2048).HasConversion(encryptedNullableString);
+            entity.HasIndex(x => x.YouTubeChannelId).IsUnique();
+            entity.Property(x => x.YouTubeChannelId).HasMaxLength(64);
+            entity.Property(x => x.YouTubeChannelTitle).HasMaxLength(128);
+            entity.Property(x => x.YouTubeStreamerAccessToken).HasMaxLength(2048).HasConversion(encryptedNullableString);
+            entity.Property(x => x.YouTubeStreamerRefreshToken).HasMaxLength(2048).HasConversion(encryptedNullableString);
+            entity.Property(x => x.YouTubeBotChannelId).HasMaxLength(64);
+            entity.Property(x => x.YouTubeBotAccessToken).HasMaxLength(2048).HasConversion(encryptedNullableString);
+            entity.Property(x => x.YouTubeBotRefreshToken).HasMaxLength(2048).HasConversion(encryptedNullableString);
+            entity.Property(x => x.CrossPostChatEnabled).HasDefaultValue(false);
+            entity.Property(x => x.CrossPostToTwitchTemplate).HasMaxLength(500);
+            entity.Property(x => x.CrossPostToYouTubeTemplate).HasMaxLength(500);
             entity.Property(x => x.BlueSkyIdentifier).HasMaxLength(256);
             entity.Property(x => x.BlueSkyAppPassword).HasMaxLength(512).HasConversion(encryptedNullableString);
             entity.Property(x => x.BlueSkyPostOnStreamStart).HasDefaultValue(true);
@@ -108,6 +122,33 @@ public sealed class AppDbContext(
             entity.HasIndex(x => x.StreamerId).IsUnique();
             entity.Property(x => x.LastFollowerName).HasMaxLength(128);
             entity.Property(x => x.LastSubscriberName).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<YouTubeLiveState>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.StreamerId).IsUnique();
+            entity.Property(x => x.VideoId).HasMaxLength(64);
+            entity.Property(x => x.LiveChatId).HasMaxLength(128);
+            entity.Property(x => x.NextPageToken).HasMaxLength(256);
+        });
+
+        modelBuilder.Entity<YouTubeViewerDurationSample>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.StreamerId, x.YouTubeViewerId, x.CapturedUtc });
+            entity.Property(x => x.YouTubeViewerId).HasMaxLength(64);
+            entity.Property(x => x.YouTubeViewerDisplayName).HasMaxLength(128);
+            entity.Property(x => x.VideoId).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<ViewerIdentityLink>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.StreamerId, x.TwitchViewerId }).IsUnique();
+            entity.HasIndex(x => new { x.StreamerId, x.YouTubeViewerId }).IsUnique();
+            entity.Property(x => x.TwitchViewerId).HasMaxLength(64);
+            entity.Property(x => x.YouTubeViewerId).HasMaxLength(64);
         });
 
         modelBuilder.Entity<EventSubDebugMessage>(entity =>
@@ -176,6 +217,21 @@ public sealed class AppDbContext(
             .HasOne(x => x.Streamer)
             .WithOne(x => x.OverlaySnapshot)
             .HasForeignKey<OverlaySnapshot>(x => x.StreamerId);
+
+        modelBuilder.Entity<YouTubeLiveState>()
+            .HasOne(x => x.Streamer)
+            .WithOne(x => x.YouTubeLiveState)
+            .HasForeignKey<YouTubeLiveState>(x => x.StreamerId);
+
+        modelBuilder.Entity<YouTubeViewerDurationSample>()
+            .HasOne(x => x.Streamer)
+            .WithMany()
+            .HasForeignKey(x => x.StreamerId);
+
+        modelBuilder.Entity<ViewerIdentityLink>()
+            .HasOne(x => x.Streamer)
+            .WithMany()
+            .HasForeignKey(x => x.StreamerId);
 
         modelBuilder.Entity<EventSubDebugMessage>()
             .HasOne(x => x.Streamer)

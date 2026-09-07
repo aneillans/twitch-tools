@@ -12,6 +12,16 @@ public sealed class Streamer
     public string? TwitchBotUserId { get; set; }
     public string? TwitchBotAccessToken { get; set; }
     public string? TwitchBotRefreshToken { get; set; }
+    public string? YouTubeChannelId { get; set; }
+    public string? YouTubeChannelTitle { get; set; }
+    public string? YouTubeStreamerAccessToken { get; set; }
+    public string? YouTubeStreamerRefreshToken { get; set; }
+    public string? YouTubeBotChannelId { get; set; }
+    public string? YouTubeBotAccessToken { get; set; }
+    public string? YouTubeBotRefreshToken { get; set; }
+    public bool CrossPostChatEnabled { get; set; }
+    public string? CrossPostToTwitchTemplate { get; set; }
+    public string? CrossPostToYouTubeTemplate { get; set; }
     public string? BlueSkyIdentifier { get; set; }
     public string? BlueSkyAppPassword { get; set; }
     public bool BlueSkyPostOnStreamStart { get; set; } = true;
@@ -37,4 +47,5 @@ public sealed class Streamer
     public ICollection<TimedChatMessage> TimedChatMessages { get; set; } = new List<TimedChatMessage>();
     public ICollection<ViewerDurationSample> ViewerDurationSamples { get; set; } = new List<ViewerDurationSample>();
     public OverlaySnapshot? OverlaySnapshot { get; set; }
+    public YouTubeLiveState? YouTubeLiveState { get; set; }
 }

@@ -19,7 +19,9 @@ public sealed class MyToolsController(
     AppDbContext dbContext,
     IOptions<TwitchOptions> twitchOptions,
     IOptions<DiscordOptions> discordOptions,
+    IOptions<YouTubeOptions> youTubeOptions,
     ITwitchApiClient twitchApiClient,
+    IYouTubeApiClient youTubeApiClient,
     IHttpClientFactory httpClientFactory,
     IDiscordScheduleSyncService discordSyncService,
     IBlueSkyApiClient blueSkyApiClient,
@@ -31,6 +33,8 @@ public sealed class MyToolsController(
 
     private const string TwitchOAuthStateCookie = "twitch_oauth_state";
     private const string TwitchOAuthModeCookie = "twitch_oauth_mode";
+    private const string YouTubeOAuthStateCookie = "youtube_oauth_state";
+    private const string YouTubeOAuthModeCookie = "youtube_oauth_mode";
     private const string DefaultBlueSkyStartedTemplate = "{streamer} is now live on Twitch.";
     private const string DefaultBlueSkyStoppedTemplate = "{streamer} has ended the stream.";
     private static readonly JsonSerializerOptions TwitchJsonOptions = new()
@@ -74,6 +78,14 @@ public sealed class MyToolsController(
                 TwitchBotAccessToken = streamer.TwitchBotAccessToken,
                 TwitchBotRefreshToken = streamer.TwitchBotRefreshToken
             },
+            YouTube = new YouTubeConnectionInput
+            {
+                YouTubeChannelId = streamer.YouTubeChannelId,
+                YouTubeChannelTitle = streamer.YouTubeChannelTitle,
+                YouTubeBotChannelId = streamer.YouTubeBotChannelId,
+                StreamerTokenStatus = await BuildYouTubeTokenStatusAsync(streamer.YouTubeStreamerAccessToken, cancellationToken),
+                BotTokenStatus = await BuildYouTubeTokenStatusAsync(streamer.YouTubeBotAccessToken, cancellationToken)
+            },
             BlueSky = new BlueSkyConnectionInput
             {
                 BlueSkyIdentifier = streamer.BlueSkyIdentifier,
@@ -115,6 +127,11 @@ public sealed class MyToolsController(
                 })
                 .ToListAsync(cancellationToken);
 
+            var isCrossPostConfigured = !string.IsNullOrWhiteSpace(streamer.TwitchBotUserId)
+                && !string.IsNullOrWhiteSpace(streamer.TwitchBotAccessToken)
+                && !string.IsNullOrWhiteSpace(streamer.YouTubeBotChannelId)
+                && !string.IsNullOrWhiteSpace(streamer.YouTubeBotAccessToken);
+
             model = new LiveAutomationViewModel
             {
                 DiscordSyncs = discordSyncs,
@@ -130,6 +147,17 @@ public sealed class MyToolsController(
                     StreamStoppedTemplate = string.IsNullOrWhiteSpace(streamer.BlueSkyStreamStoppedTemplate)
                         ? DefaultBlueSkyStoppedTemplate
                         : streamer.BlueSkyStreamStoppedTemplate
+                },
+                IsCrossPostConfigured = isCrossPostConfigured,
+                CrossPostSettings = new CrossPostSettingsInput
+                {
+                    CrossPostChatEnabled = streamer.CrossPostChatEnabled,
+                    CrossPostToTwitchTemplate = string.IsNullOrWhiteSpace(streamer.CrossPostToTwitchTemplate)
+                        ? CrossPostChatService.DefaultCrossPostTemplate
+                        : streamer.CrossPostToTwitchTemplate,
+                    CrossPostToYouTubeTemplate = string.IsNullOrWhiteSpace(streamer.CrossPostToYouTubeTemplate)
+                        ? CrossPostChatService.DefaultCrossPostTemplate
+                        : streamer.CrossPostToYouTubeTemplate
                 }
             };
         }
@@ -314,6 +342,197 @@ public sealed class MyToolsController(
             TempData["StatusMessage"] = "Twitch connection failed unexpectedly.";
             return RedirectToAction(nameof(Index));
         }
+    }
+
+    [HttpGet("/my-tools/connect/youtube")]
+    public IActionResult ConnectYouTube()
+    {
+        return BeginYouTubeOAuth("streamer");
+    }
+
+    [HttpGet("/my-tools/connect/youtube-bot")]
+    public IActionResult ConnectYouTubeBot()
+    {
+        return BeginYouTubeOAuth("bot");
+    }
+
+    private IActionResult BeginYouTubeOAuth(string mode)
+    {
+        var ownerSubject = GetOwnerSubject();
+        if (ownerSubject is null)
+        {
+            return Challenge();
+        }
+
+        var options = youTubeOptions.Value;
+        if (string.IsNullOrWhiteSpace(options.DefaultClientId)
+            || string.IsNullOrWhiteSpace(options.OAuthClientSecret)
+            || string.IsNullOrWhiteSpace(options.OAuthRedirectUri))
+        {
+            TempData["StatusMessage"] = "YouTube OAuth is not fully configured on the server.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var state = Guid.NewGuid().ToString("N");
+        Response.Cookies.Append(YouTubeOAuthStateCookie, state, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = Request.IsHttps,
+            SameSite = SameSiteMode.Lax,
+            MaxAge = TimeSpan.FromMinutes(10)
+        });
+
+        Response.Cookies.Append(YouTubeOAuthModeCookie, mode, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = Request.IsHttps,
+            SameSite = SameSiteMode.Lax,
+            MaxAge = TimeSpan.FromMinutes(10)
+        });
+
+        var authUrl =
+            $"{options.OAuthBaseUrl}" +
+            $"?response_type=code" +
+            $"&client_id={Uri.EscapeDataString(options.DefaultClientId)}" +
+            $"&redirect_uri={Uri.EscapeDataString(options.OAuthRedirectUri)}" +
+            $"&scope={Uri.EscapeDataString(options.OAuthScopes)}" +
+            $"&access_type=offline" +
+            $"&prompt=consent" +
+            $"&state={Uri.EscapeDataString(state)}";
+
+        return Redirect(authUrl);
+    }
+
+    [HttpGet("/my-tools/connect/youtube/callback")]
+    public async Task<IActionResult> YouTubeCallback(string? code, string? state, string? error, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            TempData["StatusMessage"] = $"YouTube connection failed: {error}";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var expectedState = Request.Cookies[YouTubeOAuthStateCookie];
+        var oauthMode = Request.Cookies[YouTubeOAuthModeCookie];
+        Response.Cookies.Delete(YouTubeOAuthStateCookie);
+        Response.Cookies.Delete(YouTubeOAuthModeCookie);
+        if (string.IsNullOrWhiteSpace(state) || string.IsNullOrWhiteSpace(expectedState) || !string.Equals(state, expectedState, StringComparison.Ordinal))
+        {
+            TempData["StatusMessage"] = "YouTube connection failed due to invalid OAuth state.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            TempData["StatusMessage"] = "YouTube connection failed because no authorization code was returned.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var ownerSubject = GetOwnerSubject();
+        if (ownerSubject is null)
+        {
+            return Challenge();
+        }
+
+        try
+        {
+            var options = youTubeOptions.Value;
+            var oauthClient = httpClientFactory.CreateClient();
+
+            using var tokenRequest = new HttpRequestMessage(HttpMethod.Post, options.TokenUri)
+            {
+                Content = new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["client_id"] = options.DefaultClientId,
+                    ["client_secret"] = options.OAuthClientSecret,
+                    ["code"] = code,
+                    ["grant_type"] = "authorization_code",
+                    ["redirect_uri"] = options.OAuthRedirectUri
+                })
+            };
+
+            using var tokenResponse = await oauthClient.SendAsync(tokenRequest, cancellationToken);
+            if (!tokenResponse.IsSuccessStatusCode)
+            {
+                TempData["StatusMessage"] = "YouTube token exchange failed.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            await using var tokenStream = await tokenResponse.Content.ReadAsStreamAsync(cancellationToken);
+            var tokenPayload = await JsonSerializer.DeserializeAsync<YouTubeTokenResponse>(
+                tokenStream,
+                TwitchJsonOptions,
+                cancellationToken: cancellationToken);
+            if (string.IsNullOrWhiteSpace(tokenPayload?.AccessToken))
+            {
+                TempData["StatusMessage"] = "YouTube token payload did not include an access token.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var channel = await youTubeApiClient.GetChannelAsync(new YouTubeAuthContext(tokenPayload.AccessToken), cancellationToken);
+            if (channel is null)
+            {
+                TempData["StatusMessage"] = "Unable to read YouTube channel details with the granted token.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var streamer = await GetOrCreateOwnedStreamerAsync(ownerSubject, cancellationToken);
+            if (string.Equals(oauthMode, "bot", StringComparison.OrdinalIgnoreCase))
+            {
+                streamer.YouTubeBotChannelId = channel.ChannelId;
+                streamer.YouTubeBotAccessToken = tokenPayload.AccessToken;
+                streamer.YouTubeBotRefreshToken = tokenPayload.RefreshToken ?? streamer.YouTubeBotRefreshToken;
+
+                await dbContext.SaveChangesAsync(cancellationToken);
+                TempData["StatusMessage"] = "YouTube bot account connected successfully.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            streamer.YouTubeChannelId = channel.ChannelId;
+            streamer.YouTubeChannelTitle = channel.Title;
+            streamer.YouTubeStreamerAccessToken = tokenPayload.AccessToken;
+            streamer.YouTubeStreamerRefreshToken = tokenPayload.RefreshToken ?? streamer.YouTubeStreamerRefreshToken;
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            TempData["StatusMessage"] = "YouTube connection updated successfully.";
+            return RedirectToAction(nameof(Index));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "YouTube OAuth callback failed.");
+            TempData["StatusMessage"] = "YouTube connection failed unexpectedly.";
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
+    [HttpPost("/my-tools/cross-post")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveCrossPostSettings([Bind(Prefix = nameof(LiveAutomationViewModel.CrossPostSettings))] CrossPostSettingsInput input, CancellationToken cancellationToken)
+    {
+        var streamer = await GetOwnedStreamerAsync(cancellationToken);
+        if (streamer is null)
+        {
+            return RedirectToAction(nameof(LiveAutomation));
+        }
+
+        var isCrossPostConfigured = !string.IsNullOrWhiteSpace(streamer.TwitchBotUserId)
+            && !string.IsNullOrWhiteSpace(streamer.TwitchBotAccessToken)
+            && !string.IsNullOrWhiteSpace(streamer.YouTubeBotChannelId)
+            && !string.IsNullOrWhiteSpace(streamer.YouTubeBotAccessToken);
+
+        if (!isCrossPostConfigured)
+        {
+            TempData["StatusMessage"] = "Connect both a Twitch bot account and a YouTube bot account before enabling chat cross-posting.";
+            return RedirectToAction(nameof(LiveAutomation));
+        }
+
+        streamer.CrossPostChatEnabled = input.CrossPostChatEnabled;
+        streamer.CrossPostToTwitchTemplate = TrimToNull(input.CrossPostToTwitchTemplate);
+        streamer.CrossPostToYouTubeTemplate = TrimToNull(input.CrossPostToYouTubeTemplate);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        TempData["StatusMessage"] = "Cross-posting settings saved.";
+        return RedirectToAction(nameof(LiveAutomation));
     }
 
     [HttpPost("/my-tools/twitch")]
@@ -613,6 +832,42 @@ public sealed class MyToolsController(
         };
     }
 
+    private async Task<TwitchTokenStatusViewModel> BuildYouTubeTokenStatusAsync(string? accessToken, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return TwitchTokenStatusViewModel.Missing();
+        }
+
+        var result = await youTubeApiClient.ValidateAccessTokenAsync(accessToken, cancellationToken);
+        if (!result.IsValid)
+        {
+            return new TwitchTokenStatusViewModel
+            {
+                State = "Invalid",
+                Details = string.IsNullOrWhiteSpace(result.ErrorMessage) ? "Token was rejected by Google." : result.ErrorMessage,
+                TextClass = "text-danger"
+            };
+        }
+
+        if (result.ExpiresInSeconds is <= 3600)
+        {
+            return new TwitchTokenStatusViewModel
+            {
+                State = "Expiring soon",
+                Details = $"Token is valid but expires in about {Math.Max(0, result.ExpiresInSeconds ?? 0) / 60} minutes.",
+                TextClass = "text-warning"
+            };
+        }
+
+        return new TwitchTokenStatusViewModel
+        {
+            State = "Valid",
+            Details = "Token validated successfully.",
+            TextClass = "text-success"
+        };
+    }
+
     private async Task<IReadOnlyCollection<string>> BuildTwitchGrantWarningsAsync(Streamer streamer, CancellationToken cancellationToken)
     {
         var options = twitchOptions.Value;
@@ -745,6 +1000,15 @@ public sealed class MyToolsController(
     }
 
     private sealed class TwitchTokenResponse
+    {
+        [JsonPropertyName("access_token")]
+        public string AccessToken { get; init; } = string.Empty;
+
+        [JsonPropertyName("refresh_token")]
+        public string? RefreshToken { get; init; }
+    }
+
+    private sealed class YouTubeTokenResponse
     {
         [JsonPropertyName("access_token")]
         public string AccessToken { get; init; } = string.Empty;

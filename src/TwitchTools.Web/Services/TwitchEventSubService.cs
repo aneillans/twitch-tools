@@ -19,6 +19,7 @@ public sealed class TwitchEventSubService(
     IDiscordScheduleSyncService discordScheduleSyncService,
     IOverlayEventBroker overlayEventBroker,
     IEventSubStreamStatusDispatcher streamStatusDispatcher,
+    ICrossPostChatService crossPostChatService,
     ILogger<TwitchEventSubService> logger) : ITwitchEventSubService
 {
     // How long a Twitch-Eventsub-Message-Id is remembered for duplicate detection. Twitch redelivers
@@ -672,15 +673,26 @@ public sealed class TwitchEventSubService(
             return;
         }
 
+        var chatterId = eventElement.TryGetProperty("chatter_user_id", out var chatterIdElement) && chatterIdElement.ValueKind == JsonValueKind.String
+            ? chatterIdElement.GetString() ?? string.Empty
+            : string.Empty;
+
+        // A message authored by our own configured cross-post bot is an echo of a message that was
+        // already shown when it originally arrived on the other platform (see CrossPostChatService).
+        // Drop it here instead of publishing it again and instead of forwarding it back out, which
+        // would otherwise ping-pong forever.
+        if (!string.IsNullOrWhiteSpace(streamer.TwitchBotUserId)
+            && string.Equals(chatterId, streamer.TwitchBotUserId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         var chatterLogin = eventElement.TryGetProperty("chatter_user_login", out var loginElement) && loginElement.ValueKind == JsonValueKind.String
             ? loginElement.GetString() ?? string.Empty
             : string.Empty;
         var chatterName = eventElement.TryGetProperty("chatter_user_name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String
             ? nameElement.GetString() ?? chatterLogin
             : chatterLogin;
-        var chatterId = eventElement.TryGetProperty("chatter_user_id", out var idElement) && idElement.ValueKind == JsonValueKind.String
-            ? idElement.GetString() ?? string.Empty
-            : string.Empty;
         var messageId = eventElement.TryGetProperty("message_id", out var msgIdElement) && msgIdElement.ValueKind == JsonValueKind.String
             ? msgIdElement.GetString() ?? string.Empty
             : string.Empty;
@@ -717,6 +729,7 @@ public sealed class TwitchEventSubService(
         var payload = new
         {
             listener = "message",
+            platform = "twitch",
             @event = new
             {
                 data = new
@@ -749,6 +762,8 @@ public sealed class TwitchEventSubService(
             streamer.DisplayName,
             chatterName,
             messageId);
+
+        await crossPostChatService.CrossPostFromTwitchAsync(streamer, chatterName, messageText, cancellationToken);
     }
 
     private async Task HandleStreamStatusAsync(JsonElement eventElement, bool isLive, CancellationToken cancellationToken)

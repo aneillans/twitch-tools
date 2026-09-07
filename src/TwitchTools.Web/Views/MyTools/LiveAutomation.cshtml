@@ -119,4 +119,41 @@
             </div>
         </div>
     </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">Twitch ↔ YouTube Chat Cross-posting</div>
+            <div class="card-body">
+                @if (!Model.IsCrossPostConfigured)
+                {
+                    <div class="alert alert-warning mb-3">
+                        Cross-posting needs a dedicated bot account connected on <strong>both</strong> platforms.
+                        Connect a Twitch bot and a YouTube bot on the
+                        <a asp-controller="MyTools" asp-action="Index" class="alert-link">Tools page</a>
+                        first.
+                    </div>
+                }
+
+                <form asp-controller="MyTools" asp-action="SaveCrossPostSettings" method="post">
+                    @Html.AntiForgeryToken()
+                    <fieldset disabled="@(!Model.IsCrossPostConfigured ? "disabled" : null)">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" asp-for="CrossPostSettings.CrossPostChatEnabled" />
+                            <label class="form-check-label" asp-for="CrossPostSettings.CrossPostChatEnabled">Mirror chat messages between Twitch and YouTube using the connected bot accounts</label>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" asp-for="CrossPostSettings.CrossPostToYouTubeTemplate">Twitch message, posted to YouTube as</label>
+                            <input class="form-control" asp-for="CrossPostSettings.CrossPostToYouTubeTemplate" maxlength="500" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" asp-for="CrossPostSettings.CrossPostToTwitchTemplate">YouTube message, posted to Twitch as</label>
+                            <input class="form-control" asp-for="CrossPostSettings.CrossPostToTwitchTemplate" maxlength="500" />
+                        </div>
+                        <div class="form-text mb-3">Use <code>{platform}</code>, <code>{user}</code>, and <code>{message}</code>. Mirrored messages never appear twice in the merged overlay widget feed.</div>
+                        <button class="btn btn-primary" type="submit">Save cross-posting settings</button>
+                    </fieldset>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>

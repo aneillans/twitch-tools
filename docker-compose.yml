@@ -62,6 +62,9 @@ services:
       Twitch__EventSubSecret: ${TWITCH_EVENTSUB_SECRET:-replace-with-long-random-value}
       Twitch__OAuthRedirectUri: http://localhost:8080/my-tools/connect/twitch/callback
       Twitch__EventSubCallbackUrl: http://localhost:8080/my-tools/connect/twitch/eventsub/callback
+      YouTube__DefaultClientId: ${YOUTUBE_CLIENT_ID:-}
+      YouTube__OAuthClientSecret: ${YOUTUBE_CLIENT_SECRET:-}
+      YouTube__OAuthRedirectUri: http://localhost:8080/my-tools/connect/youtube/callback
       Discord__BotClientId: ${DISCORD_BOT_CLIENT_ID:-}
       Encryption__Salt: ${ENCRYPTION_SALT:-replace-with-long-random-value}
       FeatureFlags__DisableExternalPosting: ${FEATURE_DISABLE_EXTERNAL_POSTING:-false}

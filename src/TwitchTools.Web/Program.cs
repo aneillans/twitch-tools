@@ -24,6 +24,7 @@ builder.Services.AddHttpContextAccessor();
 
 builder.Services.Configure<KeycloakOptions>(builder.Configuration.GetSection(KeycloakOptions.SectionName));
 builder.Services.Configure<TwitchOptions>(builder.Configuration.GetSection(TwitchOptions.SectionName));
+builder.Services.Configure<YouTubeOptions>(builder.Configuration.GetSection(YouTubeOptions.SectionName));
 builder.Services.Configure<BlueSkyOptions>(builder.Configuration.GetSection(BlueSkyOptions.SectionName));
 builder.Services.Configure<DiscordOptions>(builder.Configuration.GetSection(DiscordOptions.SectionName));
 builder.Services.Configure<EncryptionOptions>(builder.Configuration.GetSection(EncryptionOptions.SectionName));
@@ -121,11 +122,19 @@ builder.Services.AddHttpClient<IDiscordApiClient, DiscordApiClient>((sp, client)
     client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
 });
 
+builder.Services.AddHttpClient<IYouTubeApiClient, YouTubeApiClient>((sp, client) =>
+{
+    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<YouTubeOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+});
+
 builder.Services.AddScoped<IBlueSkyService, BlueSkyService>();
 builder.Services.AddScoped<IDiscordScheduleSyncService, DiscordScheduleSyncService>();
 builder.Services.AddScoped<ITimedChatMessageService, TimedChatMessageService>();
 builder.Services.AddScoped<IViewerMonitoringService, ViewerMonitoringService>();
+builder.Services.AddScoped<IYouTubeViewerMonitoringService, YouTubeViewerMonitoringService>();
 builder.Services.AddScoped<ITwitchEventSubService, TwitchEventSubService>();
+builder.Services.AddScoped<ICrossPostChatService, CrossPostChatService>();
 builder.Services.AddSingleton<IEventSubStreamStatusDispatcher, EventSubStreamStatusDispatcher>();
 builder.Services.AddScoped<IOverlayService, OverlayService>();
 builder.Services.AddSingleton<IOverlayEventBroker, OverlayEventBroker>();
@@ -136,6 +145,8 @@ builder.Services.AddHostedService<TwitchTokenRefreshBackgroundService>();
 builder.Services.AddHostedService<ViewerMonitoringBackgroundService>();
 builder.Services.AddHostedService<TwitchEventSubBackgroundService>();
 builder.Services.AddHostedService<EventSubStreamStatusBackgroundService>();
+builder.Services.AddHostedService<YouTubeLiveBackgroundService>();
+builder.Services.AddHostedService<YouTubeTokenRefreshBackgroundService>();
 
 var app = builder.Build();
 

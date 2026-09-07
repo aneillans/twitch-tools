@@ -5,33 +5,82 @@
     var totalPages = (int)(ViewData["TotalPages"] ?? 1);
     var noProfile = ViewData["NoProfile"] as bool? == true;
     var includeBots = ViewData["IncludeBots"] as bool? == true;
+    var platform = ViewData["Platform"] as string ?? "all";
 }
 
 <h1>Viewer Stats</h1>
-<p class="text-muted">Aggregated watch time per viewer based on chat presence while you were live.</p>
+<p class="text-muted">Aggregated watch time per viewer based on chat presence while you were live, across Twitch and YouTube.</p>
+
+@if (ViewData["StatusMessage"] is string statusMessage && !string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert alert-info">@statusMessage</div>
+}
 
 @if (noProfile)
 {
     <div class="alert alert-info">
-        You have not configured your profile yet. <a asp-controller="MyTools" asp-action="Index">Open Tools</a> to add your Twitch connection so viewer data can be collected.
+        You have not configured your profile yet. <a asp-controller="MyTools" asp-action="Index">Open Tools</a> to add your Twitch (and optionally YouTube) connection so viewer data can be collected.
     </div>
 }
 else
 {
-    <form method="get" asp-controller="ViewerStats" asp-action="Index" class="mb-3">
-        <div class="form-check">
+    <form method="get" asp-controller="ViewerStats" asp-action="Index" class="mb-3 d-flex flex-wrap align-items-center gap-3">
+        <div>
+            <label class="form-label small mb-1" for="platform">Platform</label>
+            <select class="form-select form-select-sm" id="platform" name="platform" onchange="this.form.submit()">
+                <option value="all" selected="@(platform == "all" ? "selected" : "")">All viewers</option>
+                <option value="twitch" selected="@(platform == "twitch" ? "selected" : "")">Twitch only</option>
+                <option value="youtube" selected="@(platform == "youtube" ? "selected" : "")">YouTube only</option>
+                <option value="linked" selected="@(platform == "linked" ? "selected" : "")">Linked (both platforms)</option>
+            </select>
+        </div>
+        <div class="form-check mt-4">
             <input class="form-check-input" type="checkbox" id="includeBots" name="includeBots" value="true"
                    onchange="this.form.submit()" @(includeBots ? "checked" : "") />
             <label class="form-check-label" for="includeBots">
-                Show known bots (hidden by default)
+                Show known bots (Twitch only, hidden by default)
             </label>
         </div>
     </form>
 
+    @if (Model.SuggestedLinks.Any())
+    {
+        <div class="card mb-3">
+            <div class="card-header">Suggested Links</div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">These Twitch and YouTube viewers have matching display names. Confirm any that are really the same person.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <tbody>
+                        @foreach (var suggestion in Model.SuggestedLinks)
+                        {
+                            <tr>
+                                <td><span class="badge text-bg-secondary">Twitch</span> @suggestion.TwitchUserName</td>
+                                <td><span class="badge text-bg-secondary">YouTube</span> @suggestion.YouTubeUserName</td>
+                                <td class="text-end">
+                                    <form asp-controller="ViewerStats" asp-action="Link" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="twitchViewerId" value="@suggestion.TwitchViewerId" />
+                                        <input type="hidden" name="youTubeViewerId" value="@suggestion.YouTubeViewerId" />
+                                        <input type="hidden" name="page" value="@currentPage" />
+                                        <input type="hidden" name="includeBots" value="@includeBots" />
+                                        <input type="hidden" name="platform" value="@platform" />
+                                        <button class="btn btn-sm btn-outline-primary" type="submit">Link</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
     if (!Model.Rows.Any())
     {
         <div class="alert alert-secondary">
-            No viewer data has been collected yet. Viewer watch time is recorded while you are live. Check back after your next stream.
+            No viewer data has been collected yet. Watch time is recorded while you are live. Check back after your next stream.
         </div>
     }
     else
@@ -44,8 +93,10 @@ else
                 <tr>
                     <th scope="col">#</th>
                     <th scope="col">Viewer</th>
+                    <th scope="col">Platform</th>
                     <th scope="col">Total Time Watched</th>
                     <th scope="col" class="text-end">Seconds</th>
+                    <th scope="col"></th>
                 </tr>
             </thead>
             <tbody>
@@ -62,9 +113,32 @@ else
                             }
                             else
                             {
-                                <span>@(row.TwitchUserName ?? row.TwitchViewerId)</span>
+                                <span>@row.DisplayName</span>
                             }
-                            <div class="small text-muted font-monospace">@row.TwitchViewerId</div>
+                            <div class="small text-muted font-monospace">
+                                @if (row.TwitchViewerId is not null)
+                                {
+                                    @:Twitch: @row.TwitchViewerId
+                                }
+                                @if (row.TwitchViewerId is not null && row.YouTubeViewerId is not null)
+                                {
+                                    <br />
+                                }
+                                @if (row.YouTubeViewerId is not null)
+                                {
+                                    @:YouTube: @row.YouTubeViewerId
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            @if (row.TwitchViewerId is not null)
+                            {
+                                <span class="badge text-bg-secondary">Twitch</span>
+                            }
+                            @if (row.YouTubeViewerId is not null)
+                            {
+                                <span class="badge text-bg-danger">YouTube</span>
+                            }
                         </td>
                         <td>
                             @if (row.TotalTime.TotalHours >= 1)
@@ -79,8 +153,60 @@ else
                             {
                                 @($"{row.TotalTime.Seconds}s")
                             }
+                            @if (row.IsLinked)
+                            {
+                                <div class="small text-muted">Twitch @(row.TwitchSecondsWatched ?? 0)s + YouTube @(row.YouTubeSecondsWatched ?? 0)s</div>
+                            }
                         </td>
                         <td class="text-end text-muted small">@row.TotalSecondsWatched</td>
+                        <td class="text-end">
+                            @if (row.IsLinked)
+                            {
+                                <form asp-controller="ViewerStats" asp-action="Unlink" asp-route-id="@row.LinkId" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="page" value="@currentPage" />
+                                    <input type="hidden" name="includeBots" value="@includeBots" />
+                                    <input type="hidden" name="platform" value="@platform" />
+                                    <button class="btn btn-sm btn-outline-danger" type="submit">Unlink</button>
+                                </form>
+                            }
+                            else if (row.TwitchViewerId is not null && Model.UnlinkedYouTubeViewers.Any())
+                            {
+                                <form asp-controller="ViewerStats" asp-action="Link" method="post" class="d-flex gap-1">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="twitchViewerId" value="@row.TwitchViewerId" />
+                                    <input type="hidden" name="page" value="@currentPage" />
+                                    <input type="hidden" name="includeBots" value="@includeBots" />
+                                    <input type="hidden" name="platform" value="@platform" />
+                                    <select class="form-select form-select-sm" name="youTubeViewerId" style="max-width: 12rem;">
+                                        <option value="">Link to YouTube viewer...</option>
+                                        @foreach (var candidate in Model.UnlinkedYouTubeViewers)
+                                        {
+                                            <option value="@candidate.Id">@candidate.DisplayName</option>
+                                        }
+                                    </select>
+                                    <button class="btn btn-sm btn-outline-primary" type="submit">Link</button>
+                                </form>
+                            }
+                            else if (row.YouTubeViewerId is not null && Model.UnlinkedTwitchViewers.Any())
+                            {
+                                <form asp-controller="ViewerStats" asp-action="Link" method="post" class="d-flex gap-1">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="youTubeViewerId" value="@row.YouTubeViewerId" />
+                                    <input type="hidden" name="page" value="@currentPage" />
+                                    <input type="hidden" name="includeBots" value="@includeBots" />
+                                    <input type="hidden" name="platform" value="@platform" />
+                                    <select class="form-select form-select-sm" name="twitchViewerId" style="max-width: 12rem;">
+                                        <option value="">Link to Twitch viewer...</option>
+                                        @foreach (var candidate in Model.UnlinkedTwitchViewers)
+                                        {
+                                            <option value="@candidate.Id">@candidate.DisplayName</option>
+                                        }
+                                    </select>
+                                    <button class="btn btn-sm btn-outline-primary" type="submit">Link</button>
+                                </form>
+                            }
+                        </td>
                     </tr>
                 }
             </tbody>
@@ -94,7 +220,7 @@ else
                 @for (var p = 1; p <= totalPages; p++)
                 {
                     <li class="page-item @(p == currentPage ? "active" : "")">
-                        <a class="page-link" asp-controller="ViewerStats" asp-action="Index" asp-route-page="@p" asp-route-includeBots="@includeBots">@p</a>
+                        <a class="page-link" asp-controller="ViewerStats" asp-action="Index" asp-route-page="@p" asp-route-includeBots="@includeBots" asp-route-platform="@platform">@p</a>
                     </li>
                 }
             </ul>

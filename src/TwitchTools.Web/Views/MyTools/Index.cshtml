@@ -118,6 +118,51 @@
 </div>
 
 <div class="card mb-4">
+    <div class="card-header">YouTube Profile and Connections</div>
+    <div class="card-body">
+        <div class="alert alert-secondary">
+            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+                <span>Connect YouTube to monitor live chat. Connect a separate bot account too if you want chat cross-posting between Twitch and YouTube (see Live Automation).</span>
+                <div class="d-flex gap-2">
+                    <a class="btn btn-sm btn-primary" asp-controller="MyTools" asp-action="ConnectYouTube">Connect Streamer YouTube</a>
+                    <a class="btn btn-sm btn-outline-primary" asp-controller="MyTools" asp-action="ConnectYouTubeBot">Connect YouTube Bot</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card bg-light-subtle">
+            <div class="card-header">Connected YouTube Identities</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Streamer Account</label>
+                        <input class="form-control" value="@(string.IsNullOrWhiteSpace(Model.YouTube.YouTubeChannelId) ? "Not connected" : Model.YouTube.YouTubeChannelTitle ?? "Connected")" readonly />
+                        <div class="small mt-1 @Model.YouTube.StreamerTokenStatus.TextClass">
+                            Token: @Model.YouTube.StreamerTokenStatus.State. @Model.YouTube.StreamerTokenStatus.Details
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Streamer YouTube Channel Id</label>
+                        <input class="form-control font-monospace" value="@(string.IsNullOrWhiteSpace(Model.YouTube.YouTubeChannelId) ? "-" : Model.YouTube.YouTubeChannelId)" readonly />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Bot Account</label>
+                        <input class="form-control" value="@(string.IsNullOrWhiteSpace(Model.YouTube.YouTubeBotChannelId) ? "Not connected" : "Connected")" readonly />
+                        <div class="small mt-1 @Model.YouTube.BotTokenStatus.TextClass">
+                            Token: @Model.YouTube.BotTokenStatus.State. @Model.YouTube.BotTokenStatus.Details
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Bot YouTube Channel Id</label>
+                        <input class="form-control font-monospace" value="@(string.IsNullOrWhiteSpace(Model.YouTube.YouTubeBotChannelId) ? "-" : Model.YouTube.YouTubeBotChannelId)" readonly />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
     <div class="card-header">BlueSky Connection</div>
     <div class="card-body">
         <div class="alert alert-secondary">

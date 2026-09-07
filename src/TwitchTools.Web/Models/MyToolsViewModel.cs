@@ -5,6 +5,7 @@ public sealed class MyToolsViewModel
     public bool HasProfile { get; init; }
     public IReadOnlyCollection<string> TwitchGrantWarnings { get; init; } = [];
     public TwitchConnectionInput Twitch { get; init; } = new();
+    public YouTubeConnectionInput YouTube { get; init; } = new();
     public BlueSkyConnectionInput BlueSky { get; init; } = new();
 }
 
@@ -13,6 +14,8 @@ public sealed class LiveAutomationViewModel
     public IReadOnlyCollection<DiscordSyncItem> DiscordSyncs { get; init; } = [];
     public bool IsBlueSkyConfigured { get; init; }
     public BlueSkyLivePostTemplatesInput BlueSkyTemplates { get; init; } = new();
+    public bool IsCrossPostConfigured { get; init; }
+    public CrossPostSettingsInput CrossPostSettings { get; init; } = new();
 }
 
 public sealed class TimedMessagesPageViewModel
@@ -79,6 +82,22 @@ public sealed class TwitchTokenStatusViewModel
         Details = "No access token saved.",
         TextClass = "text-muted"
     };
+}
+
+public sealed class YouTubeConnectionInput
+{
+    public string? YouTubeChannelId { get; set; }
+    public string? YouTubeChannelTitle { get; set; }
+    public string? YouTubeBotChannelId { get; set; }
+    public TwitchTokenStatusViewModel StreamerTokenStatus { get; init; } = TwitchTokenStatusViewModel.Missing();
+    public TwitchTokenStatusViewModel BotTokenStatus { get; init; } = TwitchTokenStatusViewModel.Missing();
+}
+
+public sealed class CrossPostSettingsInput
+{
+    public bool CrossPostChatEnabled { get; set; }
+    public string? CrossPostToTwitchTemplate { get; set; }
+    public string? CrossPostToYouTubeTemplate { get; set; }
 }
 
 public sealed class BlueSkyConnectionInput
