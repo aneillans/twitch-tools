@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -217,7 +218,7 @@ public sealed class YouTubeLiveBackgroundService(
                         color = "#FFFFFF"
                     }
                 },
-                renderedText = message.MessageText
+                renderedText = WebUtility.HtmlEncode(message.MessageText)
             }
         };
 

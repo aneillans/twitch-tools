@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -748,7 +749,7 @@ public sealed class TwitchEventSubService(
                         color = string.IsNullOrWhiteSpace(color) ? "#FFFFFF" : color
                     }
                 },
-                renderedText = messageText
+                renderedText = WebUtility.HtmlEncode(messageText)
             }
         };
 

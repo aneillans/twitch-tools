@@ -217,6 +217,22 @@ if (configuredFeatureFlags.EnableEventSubIngressLogging)
 app.UseWhen(
     context => !context.Request.Path.StartsWithSegments("/eventsub/twitch", StringComparison.OrdinalIgnoreCase),
     branch => branch.UseHttpsRedirection());
+// Overlays are public, token-addressed pages that render streamer and viewer content.
+// Never authenticate them with, or issue, the dashboard login cookie.
+app.UseWhen(
+    context => context.Request.Path.StartsWithSegments("/overlay", StringComparison.OrdinalIgnoreCase),
+    branch => branch.Use(async (context, next) =>
+    {
+        context.Request.Headers.Remove("Cookie");
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers.Remove("Set-Cookie");
+            return Task.CompletedTask;
+        });
+
+        await next().ConfigureAwait(false);
+    }));
+
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();

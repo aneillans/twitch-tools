@@ -3,6 +3,7 @@
 @{
     Layout = null;
     var fieldDataJson = Model.FieldDataJson;
+    var scriptNonce = ViewData["ScriptNonce"] as string;
     var onWidgetLoadDetail = JsonSerializer.Serialize(new
     {
         fieldData = JsonSerializer.Deserialize<object>(fieldDataJson),
@@ -16,17 +17,17 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@Model.WidgetName</title>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
-    <script src="https://ajax.googleapis.com/ajax/libs/webfont/1.6.26/webfont.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/twemoji.min.js"></script>
+    <script nonce="@scriptNonce" src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script nonce="@scriptNonce" src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
+    <script nonce="@scriptNonce" src="https://ajax.googleapis.com/ajax/libs/webfont/1.6.26/webfont.js"></script>
+    <script nonce="@scriptNonce" src="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/twemoji.min.js"></script>
     <style>
 @Html.Raw(Model.Css)
     </style>
 </head>
 <body>
 @Html.Raw(Model.Html)
-<script>
+<script nonce="@scriptNonce">
 (function () {
     const overlayToken = @Html.Raw(JsonSerializer.Serialize(Model.OverlayToken));
     const onWidgetLoadDetail = @Html.Raw(onWidgetLoadDetail);
@@ -73,7 +74,7 @@
     }
 })();
 </script>
-<script>
+<script nonce="@scriptNonce">
 @Html.Raw(Model.Js)
 </script>
 </body>
