@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Cryptography;
 using System.Text;
 using TwitchTools.Web.Services;
 
@@ -18,6 +19,7 @@ public sealed class OverlayController(IOverlayService overlayService, IOverlayEv
             return NotFound();
         }
 
+        SetStaticWidgetSecurityHeaders();
         return View("Widget", model);
     }
 
@@ -30,6 +32,7 @@ public sealed class OverlayController(IOverlayService overlayService, IOverlayEv
             return NotFound();
         }
 
+        SetStaticWidgetSecurityHeaders();
         return View("Widget", model);
     }
 
@@ -42,6 +45,28 @@ public sealed class OverlayController(IOverlayService overlayService, IOverlayEv
             return NotFound();
         }
 
+        var scriptNonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
+        ViewData["ScriptNonce"] = scriptNonce;
+
+        // Scripts only run from the nonced blocks and the CDNs the page loads, so viewer
+        // chat inserted as HTML (inline handlers, injected <script>) cannot execute.
+        // "sandbox allow-scripts" gives the page an opaque origin: it cannot read or send
+        // the dashboard login cookie or read responses from the rest of the site.
+        Response.Headers.ContentSecurityPolicy =
+            "sandbox allow-scripts; " +
+            "default-src 'self'; " +
+            $"script-src 'nonce-{scriptNonce}' https://ajax.googleapis.com https://cdnjs.cloudflare.com; " +
+            "style-src 'self' 'unsafe-inline' https:; " +
+            "img-src 'self' https: data: blob:; " +
+            "media-src 'self' https: data: blob:; " +
+            "font-src 'self' https: data:; " +
+            "connect-src 'self'; " +
+            "frame-src 'none'; " +
+            "object-src 'none'; " +
+            "base-uri 'none'; " +
+            "form-action 'none'";
+        SetCommonSecurityHeaders();
+
         return View("CustomWidget", model);
     }
 
@@ -52,6 +77,10 @@ public sealed class OverlayController(IOverlayService overlayService, IOverlayEv
         Response.Headers["Cache-Control"] = "no-cache";
         Response.Headers.Append("X-Accel-Buffering", "no");
 
+        // The widget page is sandboxed (opaque origin), so its EventSource request is cross-origin.
+        // The token is the only credential here; no cookies are involved.
+        Response.Headers.AccessControlAllowOrigin = "*";
+
         await Response.Body.FlushAsync(cancellationToken);
 
         await foreach (var payload in overlayEventBroker.SubscribeAsync(token, cancellationToken))
@@ -61,5 +90,18 @@ public sealed class OverlayController(IOverlayService overlayService, IOverlayEv
             await Response.Body.WriteAsync(bytes, cancellationToken);
             await Response.Body.FlushAsync(cancellationToken);
         }
+    }
+
+    private void SetStaticWidgetSecurityHeaders()
+    {
+        Response.Headers.ContentSecurityPolicy =
+            "sandbox; default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+        SetCommonSecurityHeaders();
+    }
+
+    private void SetCommonSecurityHeaders()
+    {
+        Response.Headers.XContentTypeOptions = "nosniff";
+        Response.Headers["Referrer-Policy"] = "no-referrer";
     }
 }
