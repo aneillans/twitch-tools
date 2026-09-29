@@ -94,8 +94,18 @@ public sealed class OverlayController(IOverlayService overlayService, IOverlayEv
 
     private void SetStaticWidgetSecurityHeaders()
     {
+        // "allow-scripts" is needed for OBS Custom CSS (injected by script after load) and the
+        // meta refresh; Chromium blocks both in a script-less sandbox. The page's own scripts
+        // stay blocked by script-src 'none'. https: sources allow fonts and images in Custom CSS.
         Response.Headers.ContentSecurityPolicy =
-            "sandbox; default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+            "sandbox allow-scripts; " +
+            "default-src 'none'; " +
+            "script-src 'none'; " +
+            "style-src 'unsafe-inline' https:; " +
+            "font-src https: data:; " +
+            "img-src https: data:; " +
+            "base-uri 'none'; " +
+            "form-action 'none'";
         SetCommonSecurityHeaders();
     }
 

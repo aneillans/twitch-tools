@@ -15,6 +15,8 @@ public interface ITwitchApiClient
     Task<bool> IsStreamerLiveAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<string>> GetCurrentChattersAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task SendChatMessageAsync(string broadcasterUserId, string message, TwitchAuthContext authContext, CancellationToken cancellationToken);
+    Task<TwitchModerationResult> DeleteChatMessageAsync(string broadcasterUserId, string moderatorUserId, string messageId, TwitchAuthContext authContext, CancellationToken cancellationToken);
+    Task<TwitchModerationResult> BanUserAsync(string broadcasterUserId, string moderatorUserId, string userId, int? durationSeconds, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<TwitchScheduleSegment>> GetScheduleAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<TwitchFollowerEvent?> GetLatestFollowerAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
     Task<TwitchSubscriberEvent?> GetLatestSubscriberAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken);
@@ -70,6 +72,11 @@ public sealed record TwitchAppAccessTokenResult(
     bool IsSuccess,
     string? AccessToken,
     int? ExpiresInSeconds,
+    string? ErrorMessage);
+
+public sealed record TwitchModerationResult(
+    bool IsSuccess,
+    int StatusCode,
     string? ErrorMessage);
 
 public sealed record TwitchScheduleSegment(

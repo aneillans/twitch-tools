@@ -207,6 +207,69 @@ public sealed class YouTubeApiClient(
         return true;
     }
 
+    public async Task<bool> DeleteLiveChatMessageAsync(
+        string messageId,
+        YouTubeAuthContext authContext,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Delete, $"liveChat/messages?id={Uri.EscapeDataString(messageId)}", authContext);
+        return await SendModerationRequestAsync(request, "delete live chat message", messageId, cancellationToken);
+    }
+
+    public async Task<bool> BanLiveChatUserAsync(
+        string liveChatId,
+        string channelId,
+        int? durationSeconds,
+        YouTubeAuthContext authContext,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Post, "liveChat/bans?part=snippet", authContext);
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(new
+            {
+                snippet = durationSeconds.HasValue
+                    ? (object)new
+                    {
+                        liveChatId,
+                        type = "temporary",
+                        banDurationSeconds = durationSeconds.Value,
+                        bannedUserDetails = new { channelId }
+                    }
+                    : new
+                    {
+                        liveChatId,
+                        type = "permanent",
+                        bannedUserDetails = new { channelId }
+                    }
+            }),
+            Encoding.UTF8,
+            "application/json");
+
+        return await SendModerationRequestAsync(request, durationSeconds.HasValue ? "timeout" : "ban", channelId, cancellationToken);
+    }
+
+    private async Task<bool> SendModerationRequestAsync(
+        HttpRequestMessage request,
+        string action,
+        string targetId,
+        CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (response.IsSuccessStatusCode)
+        {
+            return true;
+        }
+
+        var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        logger.LogWarning(
+            "YouTube {Action} failed for {TargetId}: {StatusCode}. Response: {ResponseBody}",
+            action,
+            targetId,
+            response.StatusCode,
+            errorBody);
+        return false;
+    }
+
     private static HttpRequestMessage CreateRequest(HttpMethod method, string relativePath, YouTubeAuthContext authContext)
     {
         var request = new HttpRequestMessage(method, relativePath);

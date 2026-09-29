@@ -19,6 +19,7 @@ public sealed class TwitchEventSubService(
     IBlueSkyService blueSkyService,
     IDiscordScheduleSyncService discordScheduleSyncService,
     IOverlayEventBroker overlayEventBroker,
+    [FromKeyedServices(StreamerChatFeed.BrokerKey)] IOverlayEventBroker streamerChatBroker,
     IEventSubStreamStatusDispatcher streamStatusDispatcher,
     ICrossPostChatService crossPostChatService,
     ILogger<TwitchEventSubService> logger) : ITwitchEventSubService
@@ -303,39 +304,31 @@ public sealed class TwitchEventSubService(
             alreadyExistsCount += streamOfflineResult.AlreadyExistsCount;
             failedCount += streamOfflineResult.FailedCount;
 
-            if (!string.IsNullOrWhiteSpace(streamer.CustomOverlayToken))
-            {
-                var chatUserId = string.IsNullOrWhiteSpace(streamer.TwitchBotUserId)
-                    ? streamer.TwitchUserId
-                    : streamer.TwitchBotUserId;
+            // Chat is always subscribed: the portal chat window needs it even without a custom overlay.
+            var chatUserId = string.IsNullOrWhiteSpace(streamer.TwitchBotUserId)
+                ? streamer.TwitchUserId
+                : streamer.TwitchBotUserId;
 
-                if (!string.Equals(chatUserId, streamer.TwitchUserId, StringComparison.Ordinal))
-                {
-                    logger.LogDebug(
-                        "Registering EventSub channel.chat.message for {Streamer} using bot user id {ChatUserId}.",
-                        streamer.DisplayName,
-                        chatUserId);
-                }
-
-                var chatResult = await EnsureSubscriptionTypeAsync(
-                    streamer,
-                    auth,
-                    options,
-                    ChannelChatMessageType,
-                    authorizationLookup,
-                    cancellationToken,
-                    extraCondition: ("user_id", chatUserId));
-
-                ensuredCount += chatResult.EnsuredCount;
-                alreadyExistsCount += chatResult.AlreadyExistsCount;
-                failedCount += chatResult.FailedCount;
-            }
-            else
+            if (!string.Equals(chatUserId, streamer.TwitchUserId, StringComparison.Ordinal))
             {
                 logger.LogDebug(
-                    "Skipping EventSub subscription channel.chat.message for {Streamer} because CustomOverlayToken is not configured.",
-                    streamer.DisplayName);
+                    "Registering EventSub channel.chat.message for {Streamer} using bot user id {ChatUserId}.",
+                    streamer.DisplayName,
+                    chatUserId);
             }
+
+            var chatResult = await EnsureSubscriptionTypeAsync(
+                streamer,
+                auth,
+                options,
+                ChannelChatMessageType,
+                authorizationLookup,
+                cancellationToken,
+                extraCondition: ("user_id", chatUserId));
+
+            ensuredCount += chatResult.EnsuredCount;
+            alreadyExistsCount += chatResult.AlreadyExistsCount;
+            failedCount += chatResult.FailedCount;
 
             await TryPrefillSubscriberSnapshotAsync(streamer, options, cancellationToken);
         }
@@ -472,11 +465,6 @@ public sealed class TwitchEventSubService(
             if (!string.IsNullOrWhiteSpace(subscriptionMessageWarning))
             {
                 warnings.Add($"{streamer.DisplayName}: {subscriptionMessageWarning}");
-            }
-
-            if (string.IsNullOrWhiteSpace(streamer.CustomOverlayToken))
-            {
-                continue;
             }
 
             var chatUserId = string.IsNullOrWhiteSpace(streamer.TwitchBotUserId)
@@ -669,7 +657,7 @@ public sealed class TwitchEventSubService(
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.TwitchUserId == broadcasterId, cancellationToken);
 
-        if (streamer is null || string.IsNullOrWhiteSpace(streamer.CustomOverlayToken))
+        if (streamer is null)
         {
             return;
         }
@@ -702,11 +690,36 @@ public sealed class TwitchEventSubService(
             : string.Empty;
 
         var messageText = string.Empty;
-        if (eventElement.TryGetProperty("message", out var messageElement) && messageElement.ValueKind == JsonValueKind.Object
-            && messageElement.TryGetProperty("text", out var textElement) && textElement.ValueKind == JsonValueKind.String)
+        var fragments = new List<StreamerChatFragment>();
+        if (eventElement.TryGetProperty("message", out var messageElement) && messageElement.ValueKind == JsonValueKind.Object)
         {
-            messageText = textElement.GetString() ?? string.Empty;
+            if (messageElement.TryGetProperty("text", out var textElement) && textElement.ValueKind == JsonValueKind.String)
+            {
+                messageText = textElement.GetString() ?? string.Empty;
+            }
+
+            if (messageElement.TryGetProperty("fragments", out var fragmentsElement) && fragmentsElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var fragment in fragmentsElement.EnumerateArray())
+                {
+                    var fragmentText = fragment.TryGetProperty("text", out var fragmentTextEl) && fragmentTextEl.ValueKind == JsonValueKind.String
+                        ? fragmentTextEl.GetString() ?? string.Empty
+                        : string.Empty;
+                    var emoteId = fragment.TryGetProperty("emote", out var emoteEl) && emoteEl.ValueKind == JsonValueKind.Object
+                        && emoteEl.TryGetProperty("id", out var emoteIdEl) && emoteIdEl.ValueKind == JsonValueKind.String
+                            ? emoteIdEl.GetString()
+                            : null;
+                    fragments.Add(new StreamerChatFragment(fragmentText, emoteId));
+                }
+            }
         }
+
+        await streamerChatBroker.PublishAsync(
+            StreamerChatFeed.Key(streamer.Id),
+            JsonSerializer.Serialize(
+                new StreamerChatMessage("twitch", messageId, chatterId, chatterLogin, chatterName, messageText, fragments, DateTimeOffset.UtcNow),
+                JsonSerializerOptions.Web),
+            cancellationToken);
 
         var isSub = false;
         var isMod = false;
@@ -753,16 +766,19 @@ public sealed class TwitchEventSubService(
             }
         };
 
-        await overlayEventBroker.PublishAsync(
-            streamer.CustomOverlayToken,
-            JsonSerializer.Serialize(payload),
-            cancellationToken);
+        if (!string.IsNullOrWhiteSpace(streamer.CustomOverlayToken))
+        {
+            await overlayEventBroker.PublishAsync(
+                streamer.CustomOverlayToken,
+                JsonSerializer.Serialize(payload),
+                cancellationToken);
 
-        logger.LogDebug(
-            "Published chat message to overlay for {Streamer}. User={ChatterName}, MsgId={MessageId}",
-            streamer.DisplayName,
-            chatterName,
-            messageId);
+            logger.LogDebug(
+                "Published chat message to overlay for {Streamer}. User={ChatterName}, MsgId={MessageId}",
+                streamer.DisplayName,
+                chatterName,
+                messageId);
+        }
 
         await crossPostChatService.CrossPostFromTwitchAsync(streamer, chatterName, messageText, cancellationToken);
     }

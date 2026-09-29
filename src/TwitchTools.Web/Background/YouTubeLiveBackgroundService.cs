@@ -15,7 +15,8 @@ namespace TwitchTools.Web.Background;
 /// Polls YouTube for each connected streamer: detects when they go live, then polls their live
 /// chat and republishes messages into the same overlay SSE stream Twitch chat uses (tagged
 /// "platform": "youtube"), and hands new messages off to <see cref="ICrossPostChatService"/> for
-/// optional Twitch forwarding. There is no push/webhook equivalent of Twitch EventSub for YouTube
+/// optional Twitch forwarding. Messages also go to the streamer's portal chat window
+/// (<see cref="StreamerChatFeed"/>). There is no push/webhook equivalent of Twitch EventSub for YouTube
 /// live chat, so this has to poll.
 /// </summary>
 public sealed class YouTubeLiveBackgroundService(
@@ -53,6 +54,7 @@ public sealed class YouTubeLiveBackgroundService(
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var youTubeApiClient = scope.ServiceProvider.GetRequiredService<IYouTubeApiClient>();
         var overlayEventBroker = scope.ServiceProvider.GetRequiredService<IOverlayEventBroker>();
+        var streamerChatBroker = scope.ServiceProvider.GetRequiredKeyedService<IOverlayEventBroker>(StreamerChatFeed.BrokerKey);
         var crossPostChatService = scope.ServiceProvider.GetRequiredService<ICrossPostChatService>();
         var viewerMonitoringService = scope.ServiceProvider.GetRequiredService<IYouTubeViewerMonitoringService>();
         var options = youTubeOptions.Value;
@@ -71,7 +73,7 @@ public sealed class YouTubeLiveBackgroundService(
 
             try
             {
-                await PollStreamerAsync(streamer, dbContext, youTubeApiClient, overlayEventBroker, crossPostChatService, viewerMonitoringService, options, cancellationToken);
+                await PollStreamerAsync(streamer, dbContext, youTubeApiClient, overlayEventBroker, streamerChatBroker, crossPostChatService, viewerMonitoringService, options, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -86,6 +88,7 @@ public sealed class YouTubeLiveBackgroundService(
         AppDbContext dbContext,
         IYouTubeApiClient youTubeApiClient,
         IOverlayEventBroker overlayEventBroker,
+        IOverlayEventBroker streamerChatBroker,
         ICrossPostChatService crossPostChatService,
         IYouTubeViewerMonitoringService viewerMonitoringService,
         YouTubeOptions options,
@@ -145,7 +148,7 @@ public sealed class YouTubeLiveBackgroundService(
 
         foreach (var message in chatResult.Messages)
         {
-            await ProcessMessageAsync(streamer, state.VideoId!, message, overlayEventBroker, crossPostChatService, viewerMonitoringService, cancellationToken);
+            await ProcessMessageAsync(streamer, state.VideoId!, message, overlayEventBroker, streamerChatBroker, crossPostChatService, viewerMonitoringService, cancellationToken);
         }
 
         state.NextPageToken = chatResult.NextPageToken;
@@ -163,6 +166,7 @@ public sealed class YouTubeLiveBackgroundService(
         string videoId,
         YouTubeChatMessage message,
         IOverlayEventBroker overlayEventBroker,
+        IOverlayEventBroker streamerChatBroker,
         ICrossPostChatService crossPostChatService,
         IYouTubeViewerMonitoringService viewerMonitoringService,
         CancellationToken cancellationToken)
@@ -189,12 +193,22 @@ public sealed class YouTubeLiveBackgroundService(
                 cancellationToken);
         }
 
-        if (string.IsNullOrWhiteSpace(streamer.CustomOverlayToken))
-        {
-            return;
-        }
-
         var displayName = string.IsNullOrWhiteSpace(message.AuthorDisplayName) ? "YouTube viewer" : message.AuthorDisplayName;
+
+        await streamerChatBroker.PublishAsync(
+            StreamerChatFeed.Key(streamer.Id),
+            JsonSerializer.Serialize(
+                new StreamerChatMessage(
+                    "youtube",
+                    message.MessageId,
+                    message.AuthorChannelId ?? string.Empty,
+                    null,
+                    displayName,
+                    message.MessageText,
+                    [],
+                    message.PublishedAtUtc ?? DateTimeOffset.UtcNow),
+                JsonSerializerOptions.Web),
+            cancellationToken);
 
         var payload = new
         {
@@ -222,7 +236,10 @@ public sealed class YouTubeLiveBackgroundService(
             }
         };
 
-        await overlayEventBroker.PublishAsync(streamer.CustomOverlayToken, JsonSerializer.Serialize(payload), cancellationToken);
+        if (!string.IsNullOrWhiteSpace(streamer.CustomOverlayToken))
+        {
+            await overlayEventBroker.PublishAsync(streamer.CustomOverlayToken, JsonSerializer.Serialize(payload), cancellationToken);
+        }
 
         await crossPostChatService.CrossPostFromYouTubeAsync(streamer, displayName, message.MessageText, cancellationToken);
     }

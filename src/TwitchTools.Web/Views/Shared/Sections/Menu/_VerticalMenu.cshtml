@@ -55,6 +55,13 @@
       </a>
     </li>
 
+    <li class='menu-item@(currentPage.StartsWith("/my-tools/chat") ? " active" : "")'>
+      <a asp-controller="Chat" asp-action="Index" class="menu-link">
+        <i class="menu-icon icon-base ri ri-chat-3-line"></i>
+        <div>Chat</div>
+      </a>
+    </li>
+
     <li class='menu-item@(currentPage.StartsWith("/TimedMessages") ? " active" : "")'>
       <a asp-controller="TimedMessages" asp-action="Index" class="menu-link">
         <i class="menu-icon icon-base ri ri-timer-line"></i>
