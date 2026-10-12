@@ -1,0 +1,200 @@
+@model TwitchTools.Web.Models.ChatPageViewModel
+@{
+    ViewData["Title"] = "Chat";
+}
+
+@section PageStyles {
+    <style>
+        #chat-log {
+            height: 70vh;
+            overflow-y: auto;
+        }
+
+        .chat-line {
+            padding: .35rem .5rem;
+            border-bottom: 1px solid var(--bs-border-color);
+            overflow-wrap: anywhere;
+        }
+
+        .chat-line.chat-removed .chat-text {
+            text-decoration: line-through;
+            opacity: .5;
+        }
+
+        .chat-line .chat-actions {
+            visibility: hidden;
+        }
+
+        .chat-line:hover .chat-actions,
+        .chat-line:focus-within .chat-actions {
+            visibility: visible;
+        }
+
+        .chat-emote {
+            height: 1.5em;
+            vertical-align: middle;
+        }
+    </style>
+}
+
+<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">Chat</h1>
+        <p class="text-muted mb-0">Live Twitch and YouTube chat. Mod actions apply on the platform the viewer is chatting on.</p>
+    </div>
+    <span id="chat-status" class="badge bg-label-secondary">Connecting…</span>
+</div>
+
+@if (!Model.TwitchConnected || !Model.YouTubeConnected)
+{
+    <div class="alert alert-info">
+        @if (!Model.TwitchConnected)
+        {
+            <div>Twitch is not connected, so Twitch chat will not appear.</div>
+        }
+        @if (!Model.YouTubeConnected)
+        {
+            <div>YouTube is not connected, so YouTube chat will not appear.</div>
+        }
+        <a asp-controller="MyTools" asp-action="Index">Manage connections</a>
+    </div>
+}
+
+<div id="chat-result" class="alert d-none" role="status"></div>
+
+<div class="card">
+    <div id="chat-log" class="card-body p-0" aria-live="polite"></div>
+</div>
+
+<form id="chat-antiforgery">@Html.AntiForgeryToken()</form>
+
+@section PageScripts {
+    <script>
+        (() => {
+            const maxLines = 500;
+            const log = document.getElementById('chat-log');
+            const status = document.getElementById('chat-status');
+            const result = document.getElementById('chat-result');
+            const token = document.querySelector('#chat-antiforgery input[name="__RequestVerificationToken"]').value;
+            const actions = [
+                { label: 'Delete', action: 'Delete' },
+                { label: '1m', action: 'Timeout', duration: 60, title: 'Time out for 1 minute' },
+                { label: '10m', action: 'Timeout', duration: 600, title: 'Time out for 10 minutes' },
+                { label: 'Ban', action: 'Ban', confirm: true }
+            ];
+
+            // All chat content goes in via textContent or attributes, never as HTML.
+            function renderText(target, msg) {
+                if (!msg.fragments || msg.fragments.length === 0) {
+                    target.textContent = msg.text;
+                    return;
+                }
+
+                for (const fragment of msg.fragments) {
+                    if (fragment.emoteId) {
+                        const img = document.createElement('img');
+                        img.className = 'chat-emote';
+                        img.src = 'https://static-cdn.jtvnw.net/emoticons/v2/' + encodeURIComponent(fragment.emoteId) + '/default/dark/1.0';
+                        img.alt = fragment.text;
+                        img.title = fragment.text;
+                        target.appendChild(img);
+                    } else {
+                        target.appendChild(document.createTextNode(fragment.text));
+                    }
+                }
+            }
+
+            function showResult(ok, message) {
+                result.className = 'alert ' + (ok ? 'alert-success' : 'alert-danger');
+                result.textContent = message;
+            }
+
+            async function moderate(msg, def, line) {
+                if (def.confirm && !window.confirm('Ban ' + msg.displayName + ' on ' + msg.platform + '?')) {
+                    return;
+                }
+
+                const body = new FormData();
+                body.append('__RequestVerificationToken', token);
+                body.append('Platform', msg.platform);
+                body.append('Action', def.action);
+                body.append('MessageId', msg.messageId);
+                body.append('UserId', msg.userId);
+                if (def.duration) {
+                    body.append('DurationSeconds', def.duration);
+                }
+
+                try {
+                    const response = await fetch('/my-tools/chat/moderate', { method: 'POST', body, credentials: 'same-origin' });
+                    const data = await response.json();
+                    showResult(data.success, data.message);
+                    if (data.success) {
+                        line.classList.add('chat-removed');
+                    }
+                } catch {
+                    showResult(false, 'The mod action request failed.');
+                }
+            }
+
+            function addLine(msg) {
+                const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+
+                const line = document.createElement('div');
+                line.className = 'chat-line d-flex gap-2 align-items-start';
+
+                const platform = document.createElement('span');
+                platform.className = 'badge ' + (msg.platform === 'youtube' ? 'bg-label-danger' : 'bg-label-primary');
+                platform.textContent = msg.platform === 'youtube' ? 'YT' : 'TW';
+
+                const content = document.createElement('div');
+                content.className = 'flex-grow-1';
+                const name = document.createElement('strong');
+                name.textContent = msg.displayName + ': ';
+                const text = document.createElement('span');
+                text.className = 'chat-text';
+                renderText(text, msg);
+                content.append(name, text);
+
+                const buttons = document.createElement('div');
+                buttons.className = 'chat-actions btn-group btn-group-sm flex-shrink-0';
+                for (const def of actions) {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'btn btn-outline-secondary';
+                    button.textContent = def.label;
+                    button.title = def.title || def.label;
+                    button.addEventListener('click', () => moderate(msg, def, line));
+                    buttons.appendChild(button);
+                }
+
+                line.append(platform, content, buttons);
+                log.appendChild(line);
+
+                while (log.childElementCount > maxLines) {
+                    log.firstElementChild.remove();
+                }
+
+                if (nearBottom) {
+                    log.scrollTop = log.scrollHeight;
+                }
+            }
+
+            const source = new EventSource('/my-tools/chat/events');
+            source.onopen = () => {
+                status.className = 'badge bg-label-success';
+                status.textContent = 'Live';
+            };
+            source.onerror = () => {
+                status.className = 'badge bg-label-warning';
+                status.textContent = 'Reconnecting…';
+            };
+            source.onmessage = (event) => {
+                try {
+                    addLine(JSON.parse(event.data));
+                } catch {
+                    // Ignore malformed events.
+                }
+            };
+        })();
+    </script>
+}

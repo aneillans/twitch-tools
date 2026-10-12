@@ -10,6 +10,7 @@ It provides:
 - Discord schedule sync targets for each streamer.
 - Viewer time monitoring while live.
 - An anonymous overlay endpoint for OBS/browser sources.
+- A portal chat window with merged Twitch + YouTube chat and mod actions.
 
 ## Tech Stack
 
@@ -146,7 +147,7 @@ Important sections:
 - `Encryption`
   - Salt used by credential encryption at rest.
 - `FeatureFlags`
-  - `DisableExternalPosting` disables outward posting side effects (BlueSky publish/profile updates, Discord event create/update/delete sync, timed Twitch chat sends, EventSub subscription creation, YouTube live chat sends, and Twitch/YouTube chat cross-posting).
+  - `DisableExternalPosting` disables outward posting side effects (BlueSky publish/profile updates, Discord event create/update/delete sync, timed Twitch chat sends, EventSub subscription creation, YouTube live chat sends, Twitch/YouTube chat cross-posting, and chat mod actions).
   - Environment variable override: `FeatureFlags__DisableExternalPosting=true`.
   - `EnableEventSubPayloadLogging` logs full EventSub request payloads (including chat message events) for debug tracing.
   - Environment variable override: `FeatureFlags__EnableEventSubPayloadLogging=true`.
@@ -203,6 +204,21 @@ Both publish onto the same per-streamer stream, so a custom widget sees one merg
 platforms are live. Each published message includes a top-level `platform` field (`"twitch"` or
 `"youtube"`) alongside the existing `listener`/`event` fields, so custom widget JS can style or
 filter by source if it wants to; existing widgets that only read `event.data` are unaffected.
+
+### Portal chat window
+
+Signed-in streamers can open `/my-tools/chat` to watch Twitch and YouTube chat live in one list.
+Messages are shown as the platform sent them, inserted as text only (Twitch emotes show as images).
+Hover a message to delete it, time the author out (1 or 10 minutes) or ban them. The action is sent
+to the platform the message came from, as the streamer's own account:
+
+- Twitch needs `moderator:manage:chat_messages` and `moderator:manage:banned_users`. Streamers
+  connected before these scopes were added must reconnect their Twitch streamer account; My Tools
+  lists the missing grants.
+- YouTube uses the existing `youtube.force-ssl` scope. Timeouts and bans need an active broadcast.
+
+Twitch chat is subscribed through EventSub for every connected streamer, whether or not a custom
+overlay is configured. Only messages that arrive while the page is open are shown.
 
 ### Twitch ↔ YouTube chat cross-posting
 

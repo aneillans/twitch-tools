@@ -299,6 +299,68 @@ public sealed class TwitchApiClient(
         }
     }
 
+    public async Task<TwitchModerationResult> DeleteChatMessageAsync(
+        string broadcasterUserId,
+        string moderatorUserId,
+        string messageId,
+        TwitchAuthContext authContext,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(
+            HttpMethod.Delete,
+            $"helix/moderation/chat?broadcaster_id={Uri.EscapeDataString(broadcasterUserId)}&moderator_id={Uri.EscapeDataString(moderatorUserId)}&message_id={Uri.EscapeDataString(messageId)}",
+            authContext);
+
+        return await SendModerationRequestAsync(request, "delete chat message", broadcasterUserId, cancellationToken);
+    }
+
+    public async Task<TwitchModerationResult> BanUserAsync(
+        string broadcasterUserId,
+        string moderatorUserId,
+        string userId,
+        int? durationSeconds,
+        TwitchAuthContext authContext,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(
+            HttpMethod.Post,
+            $"helix/moderation/bans?broadcaster_id={Uri.EscapeDataString(broadcasterUserId)}&moderator_id={Uri.EscapeDataString(moderatorUserId)}",
+            authContext);
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(new
+            {
+                data = durationSeconds.HasValue
+                    ? (object)new { user_id = userId, duration = durationSeconds.Value }
+                    : new { user_id = userId }
+            }),
+            Encoding.UTF8,
+            "application/json");
+
+        return await SendModerationRequestAsync(request, durationSeconds.HasValue ? "timeout user" : "ban user", broadcasterUserId, cancellationToken);
+    }
+
+    private async Task<TwitchModerationResult> SendModerationRequestAsync(
+        HttpRequestMessage request,
+        string action,
+        string broadcasterUserId,
+        CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (response.IsSuccessStatusCode)
+        {
+            return new TwitchModerationResult(true, (int)response.StatusCode, null);
+        }
+
+        var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        logger.LogWarning(
+            "Twitch {Action} failed for {Broadcaster}: {StatusCode}. Response: {ResponseBody}",
+            action,
+            broadcasterUserId,
+            response.StatusCode,
+            errorBody);
+        return new TwitchModerationResult(false, (int)response.StatusCode, errorBody);
+    }
+
     public async Task<IReadOnlyCollection<TwitchScheduleSegment>> GetScheduleAsync(string broadcasterUserId, TwitchAuthContext authContext, CancellationToken cancellationToken)
     {
         using var request = CreateRequest(HttpMethod.Get, $"helix/schedule?broadcaster_id={Uri.EscapeDataString(broadcasterUserId)}", authContext);

@@ -25,6 +25,19 @@ public interface IYouTubeApiClient
         string message,
         YouTubeAuthContext authContext,
         CancellationToken cancellationToken);
+
+    Task<bool> DeleteLiveChatMessageAsync(
+        string messageId,
+        YouTubeAuthContext authContext,
+        CancellationToken cancellationToken);
+
+    /// <summary>Bans a channel from the live chat; a duration makes it a temporary ban (timeout).</summary>
+    Task<bool> BanLiveChatUserAsync(
+        string liveChatId,
+        string channelId,
+        int? durationSeconds,
+        YouTubeAuthContext authContext,
+        CancellationToken cancellationToken);
 }
 
 public sealed record YouTubeAuthContext(string AccessToken);

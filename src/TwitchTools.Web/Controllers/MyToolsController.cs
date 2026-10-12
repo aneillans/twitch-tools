@@ -30,6 +30,7 @@ public sealed class MyToolsController(
     private static readonly string[] ChannelSubscriptionRequiredScopes = ["channel:read:subscriptions"];
     private static readonly string[] ChatUserRequiredScopes = ["user:read:chat", "user:bot"];
     private static readonly string[] ChatBroadcasterRequiredScopes = ["channel:bot"];
+    private static readonly string[] ChatModerationRequiredScopes = ["moderator:manage:chat_messages", "moderator:manage:banned_users"];
 
     private const string TwitchOAuthStateCookie = "twitch_oauth_state";
     private const string TwitchOAuthModeCookie = "twitch_oauth_mode";
@@ -936,6 +937,14 @@ public sealed class MyToolsController(
             ChatBroadcasterRequiredScopes,
             lookupResult.Authorizations,
             "Reconnect your streamer Twitch account to grant channel:bot.");
+
+        AddScopeWarning(
+            warnings,
+            streamer.TwitchUserId,
+            "Chat mod actions",
+            ChatModerationRequiredScopes,
+            lookupResult.Authorizations,
+            "Reconnect your streamer Twitch account to grant moderator:manage:chat_messages and moderator:manage:banned_users.");
 
         return warnings;
     }

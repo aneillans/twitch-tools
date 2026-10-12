@@ -138,6 +138,8 @@ builder.Services.AddScoped<ICrossPostChatService, CrossPostChatService>();
 builder.Services.AddSingleton<IEventSubStreamStatusDispatcher, EventSubStreamStatusDispatcher>();
 builder.Services.AddScoped<IOverlayService, OverlayService>();
 builder.Services.AddSingleton<IOverlayEventBroker, OverlayEventBroker>();
+builder.Services.AddKeyedSingleton<IOverlayEventBroker, OverlayEventBroker>(StreamerChatFeed.BrokerKey);
+builder.Services.AddScoped<IChatModerationService, ChatModerationService>();
 
 builder.Services.AddHostedService<DiscordScheduleRefreshBackgroundService>();
 builder.Services.AddHostedService<TimedChatMessageBackgroundService>();
