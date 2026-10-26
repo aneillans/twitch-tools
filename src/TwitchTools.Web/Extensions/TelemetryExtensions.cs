@@ -2,6 +2,7 @@ using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using TwitchTools.Web.Background;
 
 namespace TwitchTools.Web.Extensions;
 
@@ -19,6 +20,12 @@ public static class TelemetryExtensions
             .WithTracing(t => t
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
+                // One span per background cycle / queued item (Background/BackgroundTelemetry.cs).
+                .AddSource(BackgroundTelemetry.SourceName)
+                // Npgsql's built-in ActivitySource: a span per database command, nested under the
+                // request or background cycle that ran it. This is all Npgsql.OpenTelemetry's
+                // AddNpgsql() does, so no extra package.
+                .AddSource("Npgsql")
                 .AddOtlpExporter())
             .WithMetrics(m => m
                 .AddAspNetCoreInstrumentation()

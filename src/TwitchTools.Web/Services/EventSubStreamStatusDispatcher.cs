@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 
 namespace TwitchTools.Web.Services;
@@ -5,8 +6,14 @@ namespace TwitchTools.Web.Services;
 /// <summary>
 /// Raw payload for a stream.online/stream.offline EventSub notification that has passed
 /// signature validation and duplicate-message checks, awaiting background processing.
+/// <paramref name="Origin"/> is the trace context of the webhook request that queued it, so the
+/// background processing continues that request's trace.
 /// </summary>
-public sealed record StreamStatusEventWorkItem(bool IsLive, string RawEventJson, string MessageId);
+public sealed record StreamStatusEventWorkItem(
+    bool IsLive,
+    string RawEventJson,
+    string MessageId,
+    ActivityContext Origin = default);
 
 /// <summary>
 /// Hands stream status EventSub notifications off to a background worker so the webhook

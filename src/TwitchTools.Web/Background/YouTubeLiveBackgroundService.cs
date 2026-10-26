@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -35,13 +36,17 @@ public sealed class YouTubeLiveBackgroundService(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
+            using (var cycle = BackgroundTelemetry.StartCycle("YouTube live/chat poll"))
             {
-                await PollDueStreamersAsync(stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "YouTube live/chat polling cycle failed.");
+                try
+                {
+                    await PollDueStreamersAsync(stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    cycle.RecordFailure(ex);
+                    logger.LogError(ex, "YouTube live/chat polling cycle failed.");
+                }
             }
 
             await Task.Delay(TickInterval, stoppingToken);
@@ -77,6 +82,7 @@ public sealed class YouTubeLiveBackgroundService(
             }
             catch (Exception ex)
             {
+                Activity.Current.RecordFailure(ex);
                 logger.LogError(ex, "YouTube polling failed for {Streamer}.", streamer.DisplayName);
                 _nextPollUtc[streamer.Id] = now.AddSeconds(options.NotLivePollIntervalSeconds);
             }

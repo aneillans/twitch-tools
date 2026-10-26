@@ -12,15 +12,19 @@ public sealed class ViewerMonitoringBackgroundService(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
+            using (var cycle = BackgroundTelemetry.StartCycle("Viewer monitoring"))
             {
-                using var scope = scopeFactory.CreateScope();
-                var monitorService = scope.ServiceProvider.GetRequiredService<IViewerMonitoringService>();
-                await monitorService.PollViewerDurationsAsync(stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Viewer monitoring cycle failed.");
+                try
+                {
+                    using var scope = scopeFactory.CreateScope();
+                    var monitorService = scope.ServiceProvider.GetRequiredService<IViewerMonitoringService>();
+                    await monitorService.PollViewerDurationsAsync(stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    cycle.RecordFailure(ex);
+                    logger.LogError(ex, "Viewer monitoring cycle failed.");
+                }
             }
 
             await Task.Delay(Interval, stoppingToken);

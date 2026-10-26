@@ -18,41 +18,45 @@ public sealed class TwitchTokenRefreshBackgroundService(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
+            using (var cycle = BackgroundTelemetry.StartCycle("Twitch token refresh"))
             {
-                using var scope = scopeFactory.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var twitchApiClient = scope.ServiceProvider.GetRequiredService<ITwitchApiClient>();
-                var options = twitchOptions.Value;
-
-                var streamers = await dbContext.Streamers.ToListAsync(stoppingToken);
-                var hasChanges = false;
-
-                foreach (var streamer in streamers)
+                try
                 {
-                    hasChanges |= await RefreshTokenIfNeededAsync(
-                        streamer,
-                        isBotToken: false,
-                        twitchApiClient,
-                        options,
-                        stoppingToken);
+                    using var scope = scopeFactory.CreateScope();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    var twitchApiClient = scope.ServiceProvider.GetRequiredService<ITwitchApiClient>();
+                    var options = twitchOptions.Value;
 
-                    hasChanges |= await RefreshTokenIfNeededAsync(
-                        streamer,
-                        isBotToken: true,
-                        twitchApiClient,
-                        options,
-                        stoppingToken);
+                    var streamers = await dbContext.Streamers.ToListAsync(stoppingToken);
+                    var hasChanges = false;
+
+                    foreach (var streamer in streamers)
+                    {
+                        hasChanges |= await RefreshTokenIfNeededAsync(
+                            streamer,
+                            isBotToken: false,
+                            twitchApiClient,
+                            options,
+                            stoppingToken);
+
+                        hasChanges |= await RefreshTokenIfNeededAsync(
+                            streamer,
+                            isBotToken: true,
+                            twitchApiClient,
+                            options,
+                            stoppingToken);
+                    }
+
+                    if (hasChanges)
+                    {
+                        await dbContext.SaveChangesAsync(stoppingToken);
+                    }
                 }
-
-                if (hasChanges)
+                catch (Exception ex)
                 {
-                    await dbContext.SaveChangesAsync(stoppingToken);
+                    cycle.RecordFailure(ex);
+                    logger.LogError(ex, "Twitch token refresh cycle failed.");
                 }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Twitch token refresh cycle failed.");
             }
 
             await Task.Delay(Interval, stoppingToken);

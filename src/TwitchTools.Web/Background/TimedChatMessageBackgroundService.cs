@@ -12,15 +12,19 @@ public sealed class TimedChatMessageBackgroundService(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
+            using (var cycle = BackgroundTelemetry.StartCycle("Timed chat message dispatch"))
             {
-                using var scope = scopeFactory.CreateScope();
-                var timedChatService = scope.ServiceProvider.GetRequiredService<ITimedChatMessageService>();
-                await timedChatService.DispatchDueMessagesAsync(stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Timed message dispatch cycle failed.");
+                try
+                {
+                    using var scope = scopeFactory.CreateScope();
+                    var timedChatService = scope.ServiceProvider.GetRequiredService<ITimedChatMessageService>();
+                    await timedChatService.DispatchDueMessagesAsync(stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    cycle.RecordFailure(ex);
+                    logger.LogError(ex, "Timed message dispatch cycle failed.");
+                }
             }
 
             await Task.Delay(Interval, stoppingToken);
