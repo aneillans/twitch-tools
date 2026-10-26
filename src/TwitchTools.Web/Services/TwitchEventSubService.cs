@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -142,7 +143,11 @@ public sealed class TwitchEventSubService(
             // inline with the webhook request, which previously risked Twitch's delivery timing out
             // and redelivering the notification before we had finished (and before our duplicate
             // guard had persisted anything).
-            streamStatusDispatcher.Enqueue(new StreamStatusEventWorkItem(isLive, rawEventJson, messageId));
+            streamStatusDispatcher.Enqueue(new StreamStatusEventWorkItem(
+                isLive,
+                rawEventJson,
+                messageId,
+                Activity.Current?.Context ?? default));
             logger.LogInformation(
                 "Queued {EventType} notification for background processing. MessageId={MessageId}",
                 isLive ? StreamOnlineType : StreamOfflineType,

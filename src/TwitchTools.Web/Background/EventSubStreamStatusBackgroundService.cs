@@ -17,6 +17,9 @@ public sealed class EventSubStreamStatusBackgroundService(
     {
         await foreach (var workItem in dispatcher.ReadAllAsync(stoppingToken))
         {
+            using var work = BackgroundTelemetry.StartQueuedWork(
+                workItem.IsLive ? "EventSub stream.online" : "EventSub stream.offline",
+                workItem.Origin);
             try
             {
                 using var scope = scopeFactory.CreateScope();
@@ -25,6 +28,7 @@ public sealed class EventSubStreamStatusBackgroundService(
             }
             catch (Exception ex)
             {
+                work.RecordFailure(ex);
                 logger.LogError(
                     ex,
                     "Failed to process queued {EventType} EventSub notification. MessageId={MessageId}",

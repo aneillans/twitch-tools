@@ -19,33 +19,37 @@ public sealed class YouTubeTokenRefreshBackgroundService(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
+            using (var cycle = BackgroundTelemetry.StartCycle("YouTube token refresh"))
             {
-                using var scope = scopeFactory.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var youTubeApiClient = scope.ServiceProvider.GetRequiredService<IYouTubeApiClient>();
-                var options = youTubeOptions.Value;
-
-                var streamers = await dbContext.Streamers
-                    .Where(x => x.YouTubeStreamerRefreshToken != null || x.YouTubeBotRefreshToken != null)
-                    .ToListAsync(stoppingToken);
-
-                var hasChanges = false;
-
-                foreach (var streamer in streamers)
+                try
                 {
-                    hasChanges |= await RefreshTokenIfNeededAsync(streamer, isBotToken: false, youTubeApiClient, options, stoppingToken);
-                    hasChanges |= await RefreshTokenIfNeededAsync(streamer, isBotToken: true, youTubeApiClient, options, stoppingToken);
-                }
+                    using var scope = scopeFactory.CreateScope();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    var youTubeApiClient = scope.ServiceProvider.GetRequiredService<IYouTubeApiClient>();
+                    var options = youTubeOptions.Value;
 
-                if (hasChanges)
-                {
-                    await dbContext.SaveChangesAsync(stoppingToken);
+                    var streamers = await dbContext.Streamers
+                        .Where(x => x.YouTubeStreamerRefreshToken != null || x.YouTubeBotRefreshToken != null)
+                        .ToListAsync(stoppingToken);
+
+                    var hasChanges = false;
+
+                    foreach (var streamer in streamers)
+                    {
+                        hasChanges |= await RefreshTokenIfNeededAsync(streamer, isBotToken: false, youTubeApiClient, options, stoppingToken);
+                        hasChanges |= await RefreshTokenIfNeededAsync(streamer, isBotToken: true, youTubeApiClient, options, stoppingToken);
+                    }
+
+                    if (hasChanges)
+                    {
+                        await dbContext.SaveChangesAsync(stoppingToken);
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "YouTube token refresh cycle failed.");
+                catch (Exception ex)
+                {
+                    cycle.RecordFailure(ex);
+                    logger.LogError(ex, "YouTube token refresh cycle failed.");
+                }
             }
 
             await Task.Delay(Interval, stoppingToken);

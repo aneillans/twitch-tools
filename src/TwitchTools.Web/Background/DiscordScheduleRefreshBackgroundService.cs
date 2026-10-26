@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using TwitchTools.Web.Data;
 using TwitchTools.Web.Domain;
@@ -19,41 +20,45 @@ public sealed class DiscordScheduleRefreshBackgroundService(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
+            using (var cycle = BackgroundTelemetry.StartCycle("Discord schedule refresh"))
             {
-                using var scope = scopeFactory.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var discordSyncService = scope.ServiceProvider.GetRequiredService<IDiscordScheduleSyncService>();
-
-                var streamers = await dbContext.Streamers.AsNoTracking().ToListAsync(stoppingToken);
-                var discordSyncTargets = await dbContext.DiscordGuildSyncs
-                    .AsNoTracking()
-                    .GroupBy(x => x.StreamerId)
-                    .Select(x => new
-                    {
-                        StreamerId = x.Key,
-                        OldestLastSyncedUtc = x.Min(y => y.LastSyncedUtc)
-                    })
-                    .ToDictionaryAsync(x => x.StreamerId, x => x.OldestLastSyncedUtc, stoppingToken);
-
-                var now = DateTime.UtcNow;
-                PruneDiscordRefreshStates(streamers.Select(x => x.Id));
-
-                foreach (var streamer in streamers)
+                try
                 {
-                    var hasDiscordTargets = discordSyncTargets.TryGetValue(streamer.Id, out var oldestLastSyncedUtc);
-                    var shouldRefreshDiscord = hasDiscordTargets && IsDiscordRefreshDue(streamer.Id, oldestLastSyncedUtc, now);
-                    if (!shouldRefreshDiscord)
-                    {
-                        continue;
-                    }
+                    using var scope = scopeFactory.CreateScope();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    var discordSyncService = scope.ServiceProvider.GetRequiredService<IDiscordScheduleSyncService>();
 
-                    await TryRefreshDiscordScheduleAsync(discordSyncService, streamer, now, stoppingToken);
+                    var streamers = await dbContext.Streamers.AsNoTracking().ToListAsync(stoppingToken);
+                    var discordSyncTargets = await dbContext.DiscordGuildSyncs
+                        .AsNoTracking()
+                        .GroupBy(x => x.StreamerId)
+                        .Select(x => new
+                        {
+                            StreamerId = x.Key,
+                            OldestLastSyncedUtc = x.Min(y => y.LastSyncedUtc)
+                        })
+                        .ToDictionaryAsync(x => x.StreamerId, x => x.OldestLastSyncedUtc, stoppingToken);
+
+                    var now = DateTime.UtcNow;
+                    PruneDiscordRefreshStates(streamers.Select(x => x.Id));
+
+                    foreach (var streamer in streamers)
+                    {
+                        var hasDiscordTargets = discordSyncTargets.TryGetValue(streamer.Id, out var oldestLastSyncedUtc);
+                        var shouldRefreshDiscord = hasDiscordTargets && IsDiscordRefreshDue(streamer.Id, oldestLastSyncedUtc, now);
+                        if (!shouldRefreshDiscord)
+                        {
+                            continue;
+                        }
+
+                        await TryRefreshDiscordScheduleAsync(discordSyncService, streamer, now, stoppingToken);
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Discord schedule refresh cycle failed.");
+                catch (Exception ex)
+                {
+                    cycle.RecordFailure(ex);
+                    logger.LogError(ex, "Discord schedule refresh cycle failed.");
+                }
             }
 
             await Task.Delay(Interval, stoppingToken);
@@ -73,6 +78,7 @@ public sealed class DiscordScheduleRefreshBackgroundService(
         }
         catch (Exception ex)
         {
+            Activity.Current.RecordFailure(ex);
             RegisterDiscordRefreshFailure(streamer.Id, now);
             logger.LogError(ex, "Discord schedule sync failed for {Streamer}.", streamer.DisplayName);
         }

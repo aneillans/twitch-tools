@@ -12,15 +12,19 @@ public sealed class TwitchEventSubBackgroundService(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
+            using (var cycle = BackgroundTelemetry.StartCycle("EventSub subscription bootstrap"))
             {
-                using var scope = scopeFactory.CreateScope();
-                var eventSubService = scope.ServiceProvider.GetRequiredService<ITwitchEventSubService>();
-                await eventSubService.EnsureSubscriberSubscriptionsAsync(stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "EventSub subscription bootstrap cycle failed.");
+                try
+                {
+                    using var scope = scopeFactory.CreateScope();
+                    var eventSubService = scope.ServiceProvider.GetRequiredService<ITwitchEventSubService>();
+                    await eventSubService.EnsureSubscriberSubscriptionsAsync(stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    cycle.RecordFailure(ex);
+                    logger.LogError(ex, "EventSub subscription bootstrap cycle failed.");
+                }
             }
 
             await Task.Delay(Interval, stoppingToken);
