@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
@@ -14,8 +15,13 @@ namespace TwitchTools.Web.Controllers;
 public sealed class ChatController(
     AppDbContext dbContext,
     [FromKeyedServices(StreamerChatFeed.BrokerKey)] IOverlayEventBroker streamerChatBroker,
-    IChatModerationService chatModerationService) : Controller
+    IChatModerationService chatModerationService,
+    ILogger<ChatController> logger) : Controller
 {
+    // Comment lines keep proxies from closing an idle stream between chat messages.
+    private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(15);
+    private static readonly byte[] Heartbeat = Encoding.UTF8.GetBytes(": keep-alive\n\n");
+
     [HttpGet("/my-tools/chat")]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
@@ -48,11 +54,83 @@ public sealed class ChatController(
         Response.Headers.Append("X-Accel-Buffering", "no");
         await Response.Body.FlushAsync(cancellationToken);
 
-        await foreach (var payload in streamerChatBroker.SubscribeAsync(StreamerChatFeed.Key(streamer.Id), cancellationToken))
+        // Last-Event-ID is sent by the browser when EventSource reconnects by itself.
+        var lastEventId = Request.Headers["Last-Event-ID"].ToString();
+        logger.LogInformation(
+            "Chat stream opened for streamer {StreamerId}. LastEventId={LastEventId}",
+            streamer.Id,
+            lastEventId);
+
+        var started = Stopwatch.GetTimestamp();
+        long sent = 0;
+        long? firstSequence = null;
+        long? lastSequence = null;
+        var reason = "client-disconnected";
+
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var events = streamerChatBroker.SubscribeAsync(StreamerChatFeed.Key(streamer.Id), stop.Token).GetAsyncEnumerator(stop.Token);
+        var next = events.MoveNextAsync().AsTask();
+        var heartbeat = Task.Delay(HeartbeatInterval, stop.Token);
+        try
         {
-            var bytes = Encoding.UTF8.GetBytes($"data: {payload}\n\n");
-            await Response.Body.WriteAsync(bytes, cancellationToken);
-            await Response.Body.FlushAsync(cancellationToken);
+            while (true)
+            {
+                if (await Task.WhenAny(next, heartbeat) != next)
+                {
+                    heartbeat = Task.Delay(HeartbeatInterval, stop.Token);
+                    await Response.Body.WriteAsync(Heartbeat, stop.Token);
+                    await Response.Body.FlushAsync(stop.Token);
+                    continue;
+                }
+
+                if (!await next)
+                {
+                    reason = "broker-completed";
+                    break;
+                }
+
+                var message = events.Current;
+                var bytes = Encoding.UTF8.GetBytes($"id: {message.Sequence}\ndata: {message.Payload}\n\n");
+                await Response.Body.WriteAsync(bytes, stop.Token);
+                await Response.Body.FlushAsync(stop.Token);
+
+                firstSequence ??= message.Sequence;
+                lastSequence = message.Sequence;
+                sent++;
+                next = events.MoveNextAsync().AsTask();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The browser closed the stream.
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            reason = "write-failed";
+            logger.LogWarning(ex, "Chat stream write failed for streamer {StreamerId}.", streamer.Id);
+        }
+        finally
+        {
+            // A pending MoveNextAsync has to finish before the enumerator can be disposed.
+            await stop.CancelAsync();
+            try
+            {
+                await next;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
+            await events.DisposeAsync();
+
+            logger.LogInformation(
+                "Chat stream closed for streamer {StreamerId}. Reason={Reason}, DurationSeconds={DurationSeconds}, MessagesSent={MessagesSent}, FirstSequence={FirstSequence}, LastSequence={LastSequence}",
+                streamer.Id,
+                reason,
+                Math.Round(Stopwatch.GetElapsedTime(started).TotalSeconds, 1),
+                sent,
+                firstSequence,
+                lastSequence);
         }
     }
 

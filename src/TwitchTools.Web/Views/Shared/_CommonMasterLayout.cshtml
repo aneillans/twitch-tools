@@ -4,6 +4,7 @@
 }
 
 @inject IHttpContextAccessor httpContextAccessor
+@inject Microsoft.Extensions.Options.IOptions<TwitchTools.Web.Options.TelemetryOptions> telemetryOptions
 
 <!DOCTYPE html>
 <html lang="en" class="@(ViewData["navbarType"] is string navbarType ? navbarType : "")
@@ -46,6 +47,12 @@
 
   <!-- Include Scripts for customizer, helper, analytics, config -->
   @await Html.PartialAsync("Sections/_ScriptsIncludes")
+
+  @* Browser tracing; loaded in the head so it sees errors from the page's scripts. *@
+  @if (User.Identity?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(telemetryOptions.Value.BrowserTracesEndpoint))
+  {
+    <script src="~/js/browser-telemetry.js" asp-append-version="true" data-endpoint="/otlp/v1/traces"></script>
+  }
 </head>
 
 <body>

@@ -160,7 +160,12 @@ Important sections:
   - Always-on instrumentation (traces, metrics, and structured logs) for ASP.NET Core requests, outbound HTTP calls, and .NET runtime metrics; `service.name` is fixed to `twitch-tools-web`.
   - Exporter destination/protocol/headers are configured via the standard OTel SDK environment variables (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_EXPORTER_OTLP_HEADERS`) so this can be pointed at any existing OTel collector or OpenSearch Data Prepper OTLP pipeline without code changes.
   - `docker-compose.yml` runs a local, self-contained `otel-collector` (config at `docker/otel/config.yaml`) that just prints telemetry to its own logs (`docker compose logs otel-collector`) - handy for confirming instrumentation works without any OpenSearch dependency. Override `OTEL_EXPORTER_OTLP_ENDPOINT` to forward to a real collector/Data Prepper pipeline instead.
+  - Broker metrics (meter `TwitchTools.EventBroker`): `twitchtools.broker.events_published` tagged `broker` (`overlay` or `streamer-chat`) and `delivered` (`false` means no page or overlay was connected, so nobody got the event), and `twitchtools.broker.subscribers`. The chat stream logs each open/close with duration, close reason, messages sent and sequence range.
   - Note: `IncludeScopes` is deliberately left `false` for the log exporter - ASP.NET Core's nested logging scopes repeat the same attribute keys (e.g. `HttpMethod`), and OTLP-based backends such as OpenSearch Data Prepper reject the entire log record on a duplicate attribute key.
+- `Telemetry`
+  - `BrowserTracesEndpoint` is the collector's OTLP/HTTP traces URL (e.g. `http://otel-collector.opensearch.svc.cluster.local:4318/v1/traces`). When set, signed-in pages load `wwwroot/js/browser-telemetry.js`, which sends OTLP/JSON spans to the same-origin `/otlp/v1/traces` endpoint and the app forwards them there. Empty (the default) turns browser telemetry off.
+  - Browser spans use `service.name` `twitch-tools-browser`: `page.load`, `browser.error`, `chat.moderate` (joined to the server trace via `traceparent`) and `chat.sse.connection` (one per chat stream connection, with `chat.outcome`, `chat.messages_received`, `chat.messages_missed` and `chat.gap` events when sequence ids skip).
+  - Environment variable override: `Telemetry__BrowserTracesEndpoint`.
 
 ## Authentication and Roles
 

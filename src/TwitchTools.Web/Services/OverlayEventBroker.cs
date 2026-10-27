@@ -1,25 +1,42 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
 namespace TwitchTools.Web.Services;
 
-public sealed class OverlayEventBroker : IOverlayEventBroker
+public sealed class OverlayEventBroker(string name = OverlayEventBroker.DefaultName) : IOverlayEventBroker
 {
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, Channel<string>>> _subscribers = new(StringComparer.Ordinal);
+    public const string DefaultName = "overlay";
+    public const string MeterName = "TwitchTools.EventBroker";
 
-    public async IAsyncEnumerable<string> SubscribeAsync(
+    private static readonly Meter Meter = new(MeterName);
+
+    // delivered=false means no subscriber was connected, so the event reached nobody.
+    private static readonly Counter<long> Published = Meter.CreateCounter<long>(
+        "twitchtools.broker.events_published", description: "Events published, tagged by whether any subscriber was connected.");
+
+    private static readonly UpDownCounter<long> Subscribers = Meter.CreateUpDownCounter<long>(
+        "twitchtools.broker.subscribers", description: "Currently connected subscribers.");
+
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, Channel<BrokerEvent>>> _subscribers = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, StrongBox<long>> _sequences = new(StringComparer.Ordinal);
+
+    public async IAsyncEnumerable<BrokerEvent> SubscribeAsync(
         string overlayToken,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var channel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
+        var channel = Channel.CreateUnbounded<BrokerEvent>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = false
         });
 
-        var tokenSubscriptions = _subscribers.GetOrAdd(overlayToken, _ => new ConcurrentDictionary<Guid, Channel<string>>());
+        var tokenSubscriptions = _subscribers.GetOrAdd(overlayToken, _ => new ConcurrentDictionary<Guid, Channel<BrokerEvent>>());
         var subscriptionId = Guid.NewGuid();
         tokenSubscriptions[subscriptionId] = channel;
+        Subscribers.Add(1, new KeyValuePair<string, object?>("broker", name));
 
         try
         {
@@ -30,6 +47,7 @@ public sealed class OverlayEventBroker : IOverlayEventBroker
         }
         finally
         {
+            Subscribers.Add(-1, new KeyValuePair<string, object?>("broker", name));
             tokenSubscriptions.TryRemove(subscriptionId, out _);
             if (tokenSubscriptions.IsEmpty)
             {
@@ -40,15 +58,25 @@ public sealed class OverlayEventBroker : IOverlayEventBroker
 
     public Task PublishAsync(string overlayToken, string payload, CancellationToken cancellationToken)
     {
-        if (!_subscribers.TryGetValue(overlayToken, out var tokenSubscriptions))
+        var sequence = Interlocked.Increment(ref _sequences.GetOrAdd(overlayToken, _ => new StrongBox<long>()).Value);
+        var message = new BrokerEvent(sequence, payload);
+
+        var delivered = false;
+        if (_subscribers.TryGetValue(overlayToken, out var tokenSubscriptions))
         {
-            return Task.CompletedTask;
+            foreach (var subscription in tokenSubscriptions.Values)
+            {
+                delivered |= subscription.Writer.TryWrite(message);
+            }
         }
 
-        foreach (var subscription in tokenSubscriptions.Values)
+        Published.Add(1, new KeyValuePair<string, object?>("broker", name), new KeyValuePair<string, object?>("delivered", delivered));
+        Activity.Current?.AddEvent(new ActivityEvent("broker.published", tags: new ActivityTagsCollection
         {
-            _ = subscription.Writer.TryWrite(payload);
-        }
+            ["broker"] = name,
+            ["sequence"] = sequence,
+            ["delivered"] = delivered
+        }));
 
         return Task.CompletedTask;
     }

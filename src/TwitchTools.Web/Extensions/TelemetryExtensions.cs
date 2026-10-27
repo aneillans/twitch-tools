@@ -3,6 +3,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using TwitchTools.Web.Background;
+using TwitchTools.Web.Services;
 
 namespace TwitchTools.Web.Extensions;
 
@@ -18,8 +19,10 @@ public static class TelemetryExtensions
         services.AddOpenTelemetry()
             .ConfigureResource(r => r.AddService(serviceName))
             .WithTracing(t => t
-                .AddAspNetCoreInstrumentation()
-                .AddHttpClientInstrumentation()
+                // Browser span uploads (TelemetryController) would otherwise add a server span and
+                // a collector call span for every batch the page sends.
+                .AddAspNetCoreInstrumentation(o => o.Filter = ctx => ctx.Request.Path != "/otlp/v1/traces")
+                .AddHttpClientInstrumentation(o => o.FilterHttpRequestMessage = req => req.RequestUri?.AbsolutePath != "/v1/traces")
                 // One span per background cycle / queued item (Background/BackgroundTelemetry.cs).
                 .AddSource(BackgroundTelemetry.SourceName)
                 // Npgsql's built-in ActivitySource: a span per database command, nested under the
@@ -31,6 +34,7 @@ public static class TelemetryExtensions
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
                 .AddRuntimeInstrumentation()   // GC/heap/threads/exceptions
+                .AddMeter(OverlayEventBroker.MeterName)
                 .AddOtlpExporter())
             .WithLogging(
                 l => l.AddOtlpExporter(),

@@ -83,9 +83,9 @@ public sealed class OverlayController(IOverlayService overlayService, IOverlayEv
 
         await Response.Body.FlushAsync(cancellationToken);
 
-        await foreach (var payload in overlayEventBroker.SubscribeAsync(token, cancellationToken))
+        await foreach (var message in overlayEventBroker.SubscribeAsync(token, cancellationToken))
         {
-            var formatted = $"data: {payload}\n\n";
+            var formatted = $"data: {message.Payload}\n\n";
             var bytes = Encoding.UTF8.GetBytes(formatted);
             await Response.Body.WriteAsync(bytes, cancellationToken);
             await Response.Body.FlushAsync(cancellationToken);

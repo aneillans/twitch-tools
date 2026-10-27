@@ -2,4 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/TwitchTools.Web/TwitchTools.Web.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TwitchTools.Web.Tests/TwitchTools.Web.Tests.csproj" />
+  </Folder>
 </Solution>
