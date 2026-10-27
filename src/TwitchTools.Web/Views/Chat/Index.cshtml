@@ -76,6 +76,8 @@
             const status = document.getElementById('chat-status');
             const result = document.getElementById('chat-result');
             const token = document.querySelector('#chat-antiforgery input[name="__RequestVerificationToken"]').value;
+            const telemetry = window.twitchToolsTelemetry;
+            const maxRetryDelayMs = 30000;
             const actions = [
                 { label: 'Delete', action: 'Delete' },
                 { label: '1m', action: 'Timeout', duration: 60, title: 'Time out for 1 minute' },
@@ -124,15 +126,23 @@
                     body.append('DurationSeconds', def.duration);
                 }
 
+                const span = telemetry && telemetry.startSpan('chat.moderate', { 'chat.platform': msg.platform, 'chat.action': def.action }, { kind: 3 });
+                const headers = span ? { traceparent: span.traceparent() } : {};
                 try {
-                    const response = await fetch('/my-tools/chat/moderate', { method: 'POST', body, credentials: 'same-origin' });
+                    const response = await fetch('/my-tools/chat/moderate', { method: 'POST', body, headers, credentials: 'same-origin' });
+                    span && span.setAttribute('http.response.status_code', response.status);
                     const data = await response.json();
                     showResult(data.success, data.message);
                     if (data.success) {
                         line.classList.add('chat-removed');
+                    } else if (span) {
+                        span.setError(data.message);
                     }
-                } catch {
+                } catch (error) {
+                    span && span.setError(error && error.message);
                     showResult(false, 'The mod action request failed.');
+                } finally {
+                    span && span.end();
                 }
             }
 
@@ -179,22 +189,120 @@
                 }
             }
 
-            const source = new EventSource('/my-tools/chat/events');
-            source.onopen = () => {
-                status.className = 'badge bg-label-success';
-                status.textContent = 'Live';
-            };
-            source.onerror = () => {
-                status.className = 'badge bg-label-warning';
-                status.textContent = 'Reconnecting…';
-            };
-            source.onmessage = (event) => {
-                try {
-                    addLine(JSON.parse(event.data));
-                } catch {
-                    // Ignore malformed events.
+            function setStatus(className, text) {
+                status.className = 'badge ' + className;
+                status.textContent = text;
+            }
+
+            // One span per physical connection, so dropped streams, reconnects and missed messages
+            // show up in traces. Event ids are the broker's per-streamer sequence numbers.
+            let source = null;
+            let connection = null;
+            let lastSequence = null;
+            let retryAttempt = 0;
+            let received = 0;
+            let missed = 0;
+
+            function startConnectionSpan(trigger) {
+                connection = telemetry && telemetry.startSpan('chat.sse.connection', {
+                    'chat.trigger': trigger,
+                    'chat.retry_attempt': retryAttempt,
+                    'chat.last_sequence': lastSequence,
+                    'chat.opened': false
+                });
+                received = 0;
+                missed = 0;
+            }
+
+            function endConnectionSpan(outcome, isError) {
+                if (!connection) {
+                    return;
                 }
-            };
+                connection.setAttribute('chat.outcome', outcome);
+                connection.setAttribute('chat.messages_received', received);
+                connection.setAttribute('chat.messages_missed', missed);
+                connection.setAttribute('chat.online', navigator.onLine);
+                connection.setAttribute('chat.visibility', document.visibilityState);
+                if (isError) {
+                    connection.setError(outcome);
+                }
+                connection.end();
+                connection = null;
+            }
+
+            function trackSequence(event) {
+                const sequence = Number(event.lastEventId);
+                if (!Number.isInteger(sequence) || sequence <= 0) {
+                    return;
+                }
+
+                if (lastSequence !== null && sequence > lastSequence + 1) {
+                    const gap = sequence - lastSequence - 1;
+                    missed += gap;
+                    connection && connection.addEvent('chat.gap', { 'chat.sequence.from': lastSequence, 'chat.sequence.to': sequence, 'chat.messages_missed': gap });
+                } else if (lastSequence !== null && sequence <= lastSequence) {
+                    // The server restarted and its counter began again.
+                    connection && connection.addEvent('chat.sequence_reset', { 'chat.sequence.from': lastSequence, 'chat.sequence.to': sequence });
+                }
+                lastSequence = sequence;
+            }
+
+            function connect(trigger) {
+                startConnectionSpan(trigger);
+                source = new EventSource('/my-tools/chat/events');
+                source.onopen = () => {
+                    retryAttempt = 0;
+                    setStatus('bg-label-success', 'Live');
+                    if (connection) {
+                        connection.setAttribute('chat.opened', true);
+                        connection.addEvent('chat.open');
+                    }
+                };
+                source.onerror = () => {
+                    if (source.readyState === EventSource.CLOSED) {
+                        // The browser gave up (e.g. a non-200 or non-event-stream response such as a
+                        // login redirect). EventSource never retries from here, so we do.
+                        endConnectionSpan('closed', true);
+                        scheduleReconnect();
+                        return;
+                    }
+
+                    // CONNECTING: the browser is retrying by itself and will send Last-Event-ID.
+                    endConnectionSpan('dropped', true);
+                    startConnectionSpan('browser-retry');
+                    setStatus('bg-label-warning', 'Reconnecting…');
+                };
+                source.onmessage = (event) => {
+                    trackSequence(event);
+                    received++;
+                    try {
+                        addLine(JSON.parse(event.data));
+                    } catch (error) {
+                        connection && connection.addEvent('chat.render_failed', { 'exception.message': error && error.message });
+                    }
+                };
+            }
+
+            function scheduleReconnect() {
+                source.close();
+                const delayMs = Math.min(maxRetryDelayMs, 1000 * 2 ** retryAttempt);
+                retryAttempt++;
+                setStatus('bg-label-danger', 'Disconnected, retrying in ' + Math.round(delayMs / 1000) + 's');
+                setTimeout(() => connect('page-retry'), delayMs);
+            }
+
+            for (const name of ['online', 'offline']) {
+                window.addEventListener(name, () => connection && connection.addEvent('browser.' + name));
+            }
+            document.addEventListener('visibilitychange', () => {
+                connection && connection.addEvent('page.visibility', { 'page.visibility': document.visibilityState });
+            });
+            window.addEventListener('pagehide', () => {
+                endConnectionSpan('page-closed', false);
+                telemetry && telemetry.flush(true);
+            });
+
+            connect('page-load');
         })();
     </script>
 }

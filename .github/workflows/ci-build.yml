@@ -29,5 +29,8 @@ jobs:
       - name: Build
         run: dotnet build TwitchTools.slnx --configuration Release --no-restore
 
+      - name: Test
+        run: dotnet test TwitchTools.slnx --configuration Release --no-build
+
       - name: Build Docker image (no push)
         run: docker build -f Dockerfile -t twitch-tools:ci .

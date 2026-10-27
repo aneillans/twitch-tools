@@ -8,6 +8,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using TwitchTools.Web;
 using TwitchTools.Web.Background;
+using TwitchTools.Web.Controllers;
 using TwitchTools.Web.Data;
 using TwitchTools.Web.Extensions;
 using TwitchTools.Web.Options;
@@ -30,6 +31,7 @@ builder.Services.Configure<DiscordOptions>(builder.Configuration.GetSection(Disc
 builder.Services.Configure<EncryptionOptions>(builder.Configuration.GetSection(EncryptionOptions.SectionName));
 builder.Services.Configure<FeatureFlagsOptions>(builder.Configuration.GetSection(FeatureFlagsOptions.SectionName));
 builder.Services.Configure<SiteOptions>(builder.Configuration.GetSection(SiteOptions.SectionName));
+builder.Services.Configure<TelemetryOptions>(builder.Configuration.GetSection(TelemetryOptions.SectionName));
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
@@ -128,6 +130,8 @@ builder.Services.AddHttpClient<IYouTubeApiClient, YouTubeApiClient>((sp, client)
     client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
 });
 
+builder.Services.AddHttpClient(TelemetryController.HttpClientName);
+
 builder.Services.AddScoped<IBlueSkyService, BlueSkyService>();
 builder.Services.AddScoped<IDiscordScheduleSyncService, DiscordScheduleSyncService>();
 builder.Services.AddScoped<ITimedChatMessageService, TimedChatMessageService>();
@@ -137,8 +141,8 @@ builder.Services.AddScoped<ITwitchEventSubService, TwitchEventSubService>();
 builder.Services.AddScoped<ICrossPostChatService, CrossPostChatService>();
 builder.Services.AddSingleton<IEventSubStreamStatusDispatcher, EventSubStreamStatusDispatcher>();
 builder.Services.AddScoped<IOverlayService, OverlayService>();
-builder.Services.AddSingleton<IOverlayEventBroker, OverlayEventBroker>();
-builder.Services.AddKeyedSingleton<IOverlayEventBroker, OverlayEventBroker>(StreamerChatFeed.BrokerKey);
+builder.Services.AddSingleton<IOverlayEventBroker>(_ => new OverlayEventBroker());
+builder.Services.AddKeyedSingleton<IOverlayEventBroker>(StreamerChatFeed.BrokerKey, (_, _) => new OverlayEventBroker(StreamerChatFeed.BrokerKey));
 builder.Services.AddScoped<IChatModerationService, ChatModerationService>();
 
 builder.Services.AddHostedService<DiscordScheduleRefreshBackgroundService>();

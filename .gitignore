@@ -47,3 +47,6 @@ Thumbs.db
 
 # Local containers/data
 postgres-data/
+
+# Editor language-server cache
+*.lscache
