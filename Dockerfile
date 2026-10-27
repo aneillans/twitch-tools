@@ -8,8 +8,8 @@ COPY dotnet-tools.json ./
 COPY Directory.Packages.props ./
 COPY Directory.Build.props ./
 COPY src/TwitchTools.Web/TwitchTools.Web.csproj src/TwitchTools.Web/
-COPY src/TwitchTools.Web/nuget.config src/TwitchTools.Web/
-RUN dotnet restore src/TwitchTools.Web/TwitchTools.Web.csproj --configfile src/TwitchTools.Web/nuget.config
+COPY nuget.config ./
+RUN dotnet restore src/TwitchTools.Web/TwitchTools.Web.csproj --configfile nuget.config
 
 COPY . .
 RUN dotnet publish src/TwitchTools.Web/TwitchTools.Web.csproj -c Release -o /app/publish /p:UseAppHost=false
